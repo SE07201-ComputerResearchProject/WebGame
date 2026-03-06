@@ -1,0 +1,22 @@
+{
+  "users": [],
+  "friends": [],
+  "games": [
+    {
+      "id": 1,
+      "title": "Cyber Racers 2077",
+      "category": "Đua xe",
+      "rating": 4.8,
+      "players": 12500,
+      "image": "https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=600&q=80"
+    },
+    {
+      "id": 2,
+      "title": "Space Warriors",
+      "category": "Bắn súng",
+      "rating": 4.5,
+      "players": 8900
+    }
+  ],
+  "leaderboard": []
+}

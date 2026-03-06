@@ -1,0 +1,223 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 10%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 187 100% 50%;
+    --primary-foreground: 222 47% 6%;
+
+    --secondary: 280 100% 60%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 222 30% 15%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 320 100% 60%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 222 30% 18%;
+    --input: 222 30% 15%;
+    --ring: 187 100% 50%;
+
+    --radius: 0.75rem;
+
+    /* Custom gaming tokens */
+    --neon-cyan: 187 100% 50%;
+    --neon-magenta: 320 100% 60%;
+    --neon-purple: 280 100% 60%;
+    --neon-green: 142 100% 50%;
+    --neon-orange: 25 100% 55%;
+
+    --gradient-gaming: linear-gradient(135deg, hsl(var(--neon-cyan)) 0%, hsl(var(--neon-magenta)) 50%, hsl(var(--neon-purple)) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(222 47% 12%) 0%, hsl(222 47% 8%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(222 47% 8%) 0%, hsl(280 50% 12%) 50%, hsl(222 47% 6%) 100%);
+    
+    --glow-cyan: 0 0 20px hsl(var(--neon-cyan) / 0.5), 0 0 40px hsl(var(--neon-cyan) / 0.3);
+    --glow-magenta: 0 0 20px hsl(var(--neon-magenta) / 0.5), 0 0 40px hsl(var(--neon-magenta) / 0.3);
+    --glow-purple: 0 0 20px hsl(var(--neon-purple) / 0.5), 0 0 40px hsl(var(--neon-purple) / 0.3);
+
+    --glass-bg: hsl(222 47% 10% / 0.8);
+    --glass-border: hsl(222 30% 25% / 0.5);
+
+    --sidebar-background: 222 47% 8%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 187 100% 50%;
+    --sidebar-primary-foreground: 222 47% 6%;
+    --sidebar-accent: 222 30% 15%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 222 30% 18%;
+    --sidebar-ring: 187 100% 50%;
+  }
+
+  .dark {
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Orbitron', sans-serif;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply backdrop-blur-xl border rounded-xl;
+    background: var(--glass-bg);
+    border-color: var(--glass-border);
+  }
+
+  .neon-text {
+    text-shadow: var(--glow-cyan);
+  }
+
+  .neon-text-magenta {
+    text-shadow: var(--glow-magenta);
+  }
+
+  .gradient-text {
+    background: var(--gradient-gaming);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .neon-border {
+    box-shadow: inset 0 0 0 1px hsl(var(--neon-cyan) / 0.3), var(--glow-cyan);
+  }
+
+  .neon-border-magenta {
+    box-shadow: inset 0 0 0 1px hsl(var(--neon-magenta) / 0.3), var(--glow-magenta);
+  }
+
+  .game-card {
+    @apply relative overflow-hidden rounded-xl transition-all duration-500;
+    background: var(--gradient-card);
+  }
+
+  .game-card:hover {
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 0 20px 40px hsl(var(--neon-cyan) / 0.2), var(--glow-cyan);
+  }
+
+  .game-card::before {
+    content: '';
+    @apply absolute inset-0 opacity-0 transition-opacity duration-500;
+    background: linear-gradient(180deg, hsl(var(--neon-cyan) / 0.1) 0%, transparent 50%);
+  }
+
+  .game-card:hover::before {
+    @apply opacity-100;
+  }
+
+  .btn-gaming {
+    @apply relative overflow-hidden font-semibold transition-all duration-300;
+    font-family: 'Orbitron', sans-serif;
+  }
+
+  .btn-gaming::before {
+    content: '';
+    @apply absolute inset-0 opacity-0 transition-opacity duration-300;
+    background: var(--gradient-gaming);
+  }
+
+  .btn-gaming:hover::before {
+    @apply opacity-20;
+  }
+
+  .pulse-glow {
+    animation: pulseGlow 2s ease-in-out infinite;
+  }
+
+  .float-animation {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      hsl(var(--neon-cyan) / 0.1) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 3s linear infinite;
+  }
+}
+
+@layer utilities {
+  .scrollbar-gaming {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--neon-cyan) / 0.5) hsl(var(--muted));
+  }
+
+  .scrollbar-gaming::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .scrollbar-gaming::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+    border-radius: 3px;
+  }
+
+  .scrollbar-gaming::-webkit-scrollbar-thumb {
+    background: hsl(var(--neon-cyan) / 0.5);
+    border-radius: 3px;
+  }
+
+  .scrollbar-gaming::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--neon-cyan));
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 20px hsl(var(--neon-cyan) / 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px hsl(var(--neon-cyan) / 0.6), 0 0 60px hsl(var(--neon-magenta) / 0.3);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
