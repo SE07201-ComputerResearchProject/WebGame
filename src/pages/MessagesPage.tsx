@@ -6,13 +6,6 @@ import AuthModal from "@/components/AuthModal";
 import WalletModal from "@/components/WalletModal";
 import Footer from "@/components/Footer";
 
-const mockFriend = {
-  id: 1,
-  name: "Người bạn",
-  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=friend1",
-  status: "online",
-};
-
 const MessagesPage = () => {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isWalletOpen, setIsWalletOpen] = useState(false);

@@ -1,19 +1,24 @@
 import GameCard from "./GameCard";
-import { Gamepad2 } from "lucide-react";
+import { Gamepad2, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 
 const GameGrid = () => {
   const [games, setGames] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
         const res = await api.getGames();
-        if (mounted && res?.ok) setGames(res.games || []);
+        if (mounted && res?.ok) {
+          setGames(res.games || []);
+        }
       } catch (e) {
-        // ignore
+        console.error("Lỗi khi tải games", e);
+      } finally {
+        if (mounted) setIsLoading(false);
       }
     })();
     return () => { mounted = false; };
@@ -21,11 +26,9 @@ const GameGrid = () => {
 
   return (
     <section className="py-20 relative">
-      {/* Background Effect */}
       <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/5 to-transparent pointer-events-none" />
       
       <div className="container mx-auto px-4 relative z-10">
-        {/* Section Header */}
         <div className="flex items-center justify-between mb-10">
           <div className="flex items-center gap-4">
             <div className="relative">
@@ -42,7 +45,6 @@ const GameGrid = () => {
             </div>
           </div>
           
-          {/* Filter Tabs */}
           <div className="hidden md:flex items-center gap-2">
             <FilterTab label="Tất cả" active />
             <FilterTab label="Miễn phí" />
@@ -51,18 +53,22 @@ const GameGrid = () => {
           </div>
         </div>
 
-        {/* Game Grid - Compact Layout 5-6 per row */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-          {games.map((game) => (
-            <GameCard 
-              key={game.id} 
-              {...game}
-              isCompact
-            />
-          ))}
-        </div>
+        {isLoading ? (
+          <div className="flex justify-center items-center py-20">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : games.length === 0 ? (
+          <div className="text-center text-muted-foreground py-20">
+            Chưa có trò chơi nào được tải lên.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+            {games.map((game) => (
+              <GameCard key={game.id} {...game} isCompact />
+            ))}
+          </div>
+        )}
 
-        {/* Load More */}
         <div className="text-center mt-12">
           <button className="px-8 py-3 rounded-xl font-display font-semibold text-muted-foreground border border-border/50 hover:border-primary/50 hover:text-primary transition-all duration-300 hover:shadow-[0_0_20px_hsl(var(--primary)/0.2)]">
             Xem thêm game
