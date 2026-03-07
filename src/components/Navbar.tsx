@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import auth from "@/lib/auth";
@@ -12,7 +12,10 @@ import {
   Menu,
   X,
   Search,
-  Sparkles
+  Sparkles,
+  ShieldCheck,
+  LogOut,
+  ChevronDown
 } from "lucide-react";
 
 interface NavbarProps {
@@ -24,11 +27,26 @@ const Navbar = ({ onAuthClick, onWalletClick }: NavbarProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [user, setUser] = useState(auth.getUser());
   const location = useLocation();
+  
+  // State quản lý Menu của User (Dropdown)
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handler = () => setUser(auth.getUser());
     window.addEventListener('auth-change', handler);
     return () => window.removeEventListener('auth-change', handler);
+  }, []);
+
+  // Logic đóng Dropdown Menu khi click ra ngoài
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   return (
@@ -41,7 +59,7 @@ const Navbar = ({ onAuthClick, onWalletClick }: NavbarProps) => {
               <Gamepad2 className="w-8 h-8 text-primary" />
               <div className="absolute inset-0 blur-lg bg-primary/50 -z-10" />
             </div>
-            <span className="font-display font-bold text-xl gradient-text">
+            <span className="font-display font-bold text-xl gradient-text hidden sm:block">
               NEXUS GAMES
             </span>
           </div>
@@ -67,7 +85,7 @@ const Navbar = ({ onAuthClick, onWalletClick }: NavbarProps) => {
           </div>
 
           {/* Actions */}
-          <div className="hidden md:flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-4">
             <Button 
               variant="neon" 
               size="sm" 
@@ -79,12 +97,52 @@ const Navbar = ({ onAuthClick, onWalletClick }: NavbarProps) => {
               <span className="font-bold">Nạp tiền</span>
               <Sparkles className="w-3 h-3 text-neon-orange ml-1" />
             </Button>
+
             {user ? (
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">{user.username}</span>
-                <Button variant="ghost" size="sm" onClick={() => { auth.logout(); }}>
-                  Đăng xuất
-                </Button>
+              // MENU DROPDOWN CỦA NGƯỜI DÙNG
+              <div className="relative" ref={profileMenuRef}>
+                <button 
+                  onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                  className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-muted/50 transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/50 flex items-center justify-center overflow-hidden">
+                    <User className="w-4 h-4 text-primary" />
+                  </div>
+                  <span className="text-sm font-medium">{user.username}</span>
+                  <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${isProfileMenuOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Khung Menu Xổ Xuống */}
+                {isProfileMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-56 glass-card border border-border/50 rounded-xl shadow-2xl py-2 animate-fade-in z-50">
+                    <div className="px-4 py-3 border-b border-border/50 mb-2">
+                      <p className="text-sm font-bold text-foreground">{user.username}</p>
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">{user.email}</p>
+                    </div>
+                    
+                    <button 
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
+                        window.dispatchEvent(new CustomEvent('open-mfa'));
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted/50 transition-colors"
+                    >
+                      <ShieldCheck className="w-4 h-4 text-primary" />
+                      Bảo mật MFA
+                    </button>
+                    
+                    <button 
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
+                        auth.logout();
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Đăng xuất
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <Button variant="gaming" size="sm" onClick={onAuthClick}>
@@ -111,15 +169,30 @@ const Navbar = ({ onAuthClick, onWalletClick }: NavbarProps) => {
               <MobileNavItem to="/leaderboard" icon={<Trophy className="w-5 h-5" />} label="Xếp hạng" active={location.pathname === '/leaderboard'} />
               <MobileNavItem to="/friends" icon={<Users className="w-5 h-5" />} label="Bạn bè" active={location.pathname === '/friends'} />
               <MobileNavItem to="/messages" icon={<MessageCircle className="w-5 h-5" />} label="Tin nhắn" active={location.pathname === '/messages'} />
-              <div className="flex gap-2 mt-4">
-                <Button variant="neon" size="sm" className="flex-1" onClick={onWalletClick}>
-                  <Wallet className="w-4 h-4" />
+              
+              <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-border/50">
+                <Button variant="neon" className="w-full justify-start" onClick={() => { setIsMenuOpen(false); onWalletClick(); }}>
+                  <Wallet className="w-5 h-5 mr-3" />
                   Nạp tiền
                 </Button>
-                <Button variant="gaming" size="sm" className="flex-1" onClick={onAuthClick}>
-                  <User className="w-4 h-4" />
-                  Đăng nhập
-                </Button>
+                
+                {user ? (
+                  <>
+                    <Button variant="outline" className="w-full justify-start border-border/50" onClick={() => { setIsMenuOpen(false); window.dispatchEvent(new CustomEvent('open-mfa')); }}>
+                      <ShieldCheck className="w-5 h-5 mr-3 text-primary" />
+                      Bảo mật MFA
+                    </Button>
+                    <Button variant="ghost" className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => { setIsMenuOpen(false); auth.logout(); }}>
+                      <LogOut className="w-5 h-5 mr-3" />
+                      Đăng xuất
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="gaming" className="w-full justify-start" onClick={() => { setIsMenuOpen(false); onAuthClick(); }}>
+                    <User className="w-5 h-5 mr-3" />
+                    Đăng nhập
+                  </Button>
+                )}
               </div>
             </div>
           </div>

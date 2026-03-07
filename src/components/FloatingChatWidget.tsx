@@ -27,17 +27,14 @@ interface Message {
   time: string;
 }
 
-const mockMessages: Message[] = [
-  { id: 1, text: "Hey! Đang chơi game gì vậy?", sender: "friend", time: "10:30" },
-  { id: 2, text: "Đang farm rank Cyber Racers nè 😎", sender: "me", time: "10:31" },
-];
+
 
 const FloatingChatWidget = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [friends, setFriends] = useState<Friend[]>([]);
-  const [messages, setMessages] = useState<Message[]>(mockMessages);
+ const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const socketRef = useRef<any>(null);
 
@@ -125,9 +122,7 @@ const FloatingChatWidget = () => {
           <>
             <MessageCircle className="w-6 h-6 text-primary-foreground" />
             {/* Notification Badge */}
-            <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-neon-orange text-xs font-bold flex items-center justify-center text-background">
-              3
-            </span>
+            
           </>
         )}
       </button>

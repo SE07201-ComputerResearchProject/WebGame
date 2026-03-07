@@ -17,11 +17,12 @@ async function postJSON(path: string, body: any) {
   return res.json();
 }
 
-export async function register(payload: { username: string; email: string; password: string }) {
+// ===== CÁC HÀM GỌI API CƠ BẢN =====
+export async function register(payload: { username: string; email: string; password: string; captchaToken?: string | null }) {
   return postJSON("/api/auth/register", payload);
 }
 
-export async function login(payload: { email: string; password: string }) {
+export async function login(payload: { email: string; password: string; captchaToken?: string | null }) {
   return postJSON("/api/auth/login", payload);
 }
 
@@ -48,6 +49,33 @@ export async function addFriend(payload: { name: string; avatar?: string }) {
   return postJSON('/api/friends/add', payload);
 }
 
+// ===== 3 HÀM XỬ LÝ BẢO MẬT MFA (VỪA ĐƯỢC BỔ SUNG) =====
+export async function verifyMfaLogin(payload: { tempToken: string; code: string }) {
+  return postJSON("/api/auth/login/mfa", payload);
+}
+
+export async function setupMfa() {
+  const res = await fetch(`${BASE}/api/auth/mfa/setup`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  return res.json();
+}
+
+export async function enableMfa(payload: { code: string }) {
+  return postJSON("/api/auth/mfa/enable", payload);
+}
+
+export async function getMfaStatus() {
+  const res = await fetch(`${BASE}/api/auth/mfa/status`, { headers: authHeaders() });
+  return res.json();
+}
+
+export async function disableMfa(payload: { code: string }) {
+  return postJSON("/api/auth/mfa/disable", payload);
+}
+
+// ===== CẤU HÌNH WEBSOCKET =====
 let _socket: Socket | null = null;
 export function createSocket() {
   if (_socket) return _socket;
@@ -60,4 +88,41 @@ export function getSocket() {
   return _socket;
 }
 
-export default { register, login, getGames, getFriends, getLeaderboard, submitScore, addFriend, createSocket, getSocket };
+export async function setupSmsMfa(payload: { phone: string }) {
+  return postJSON("/api/auth/mfa/setup-sms", payload);
+}
+
+export async function enableSmsMfa(payload: { code: string }) {
+  return postJSON("/api/auth/mfa/enable-sms", payload);
+}
+
+export async function requestDisableSms() {
+  return postJSON("/api/auth/mfa/request-disable-sms", {});
+}
+
+export async function googleLogin(credential: string) {
+  return postJSON("/api/auth/google", { credential });
+}
+
+// ===== XUẤT KHẨU TẤT CẢ ĐỂ CÁC FILE KHÁC DÙNG ĐƯỢC =====
+export default { 
+  register, 
+  login, 
+  getGames, 
+  getFriends, 
+  getLeaderboard, 
+  submitScore, 
+  addFriend, 
+  createSocket, 
+  getSocket,
+  verifyMfaLogin,
+  setupMfa,
+  enableMfa,
+  getMfaStatus,
+  disableMfa,
+  setupSmsMfa,
+  enableSmsMfa,
+  requestDisableSms,
+  googleLogin
+
+};

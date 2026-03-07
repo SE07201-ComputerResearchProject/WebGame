@@ -26,6 +26,7 @@ const paymentMethods = [
 const WalletModal = ({ isOpen, onClose }: WalletModalProps) => {
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
   const [selectedPayment, setSelectedPayment] = useState<string | null>(null);
+  const [balance, setBalance] = useState<number>(0);
 
   if (!isOpen) return null;
 
@@ -74,14 +75,13 @@ const WalletModal = ({ isOpen, onClose }: WalletModalProps) => {
             </p>
           </div>
 
-          {/* Current Balance */}
+         {/* Current Balance */}
           <div className="glass-card p-4 rounded-xl mb-6 text-center">
             <p className="text-sm text-muted-foreground">Số dư hiện tại</p>
             <p className="font-display text-3xl font-bold text-primary mt-1">
-              125.000đ
+              {balance.toLocaleString('vi-VN')}đ
             </p>
           </div>
-
           {/* Amount Selection */}
           <div className="mb-6">
             <p className="text-sm font-medium text-foreground mb-3">Chọn gói nạp</p>
