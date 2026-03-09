@@ -375,4 +375,22 @@ router.get('/me', requireAuth, (req, res) => {
   res.json({ ok: true, user: req.user });
 });
 
+// API: Lấy danh sách tất cả người dùng (Để làm danh bạ nhắn tin)
+router.get('/users', async (req, res) => {
+  try {
+    // Import thẳng db vào bên trong hàm để chắc chắn 100% không bị ReferenceError
+    const database = require('../db'); 
+    const pool = typeof database.getPool === 'function' ? database.getPool() : database.pool;
+    
+    // Lấy ID và Username của mọi người, trừ mật khẩu ra
+    const result = await pool.request().query(`
+      SELECT id, username, email FROM dbo.users ORDER BY username ASC
+    `);
+    res.json({ ok: true, users: result.recordset });
+  } catch (error) {
+    console.error("Lỗi lấy danh sách user:", error);
+    res.status(500).json({ error: "Lỗi kết nối CSDL" });
+  }
+});
+
 module.exports = router;

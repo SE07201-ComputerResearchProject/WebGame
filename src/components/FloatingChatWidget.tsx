@@ -1,323 +1,311 @@
 import { useState, useEffect, useRef } from "react";
-import { 
-  MessageCircle, 
-  X, 
-  Search, 
-  Send, 
-  ArrowLeft,
-  Circle,
-  Minimize2
-} from "lucide-react";
+import { MessageCircle, X, Send, User, ChevronDown, ArrowLeft, Globe, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/use-toast";
+import auth from "@/lib/auth";
+import { io, Socket } from "socket.io-client";
 import api from "@/lib/api";
 
-interface Friend {
+interface ChatMessage {
   id: number;
-  name: string;
-  avatar: string;
-  status: "online" | "offline" | "playing";
-  game?: string;
-  lastMessage?: string;
+  content: string;
+  username: string;
+  sender_id: number;
+  receiver_id?: number | null;
+  created_at: string;
 }
 
-interface Message {
+interface ChatUser {
   id: number;
-  text: string;
-  sender: "me" | "friend";
-  time: string;
+  username: string;
 }
-
-
 
 const FloatingChatWidget = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [friends, setFriends] = useState<Friend[]>([]);
- const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState("");
-  const socketRef = useRef<any>(null);
+  const [view, setView] = useState<"list" | "global" | "private">("list");
+  const [targetUser, setTargetUser] = useState<ChatUser | null>(null);
+  
+  const [usersList, setUsersList] = useState<ChatUser[]>([]);
+  const [globalMessages, setGlobalMessages] = useState<ChatMessage[]>([]);
+  const [privateMessages, setPrivateMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [socket, setSocket] = useState<Socket | null>(null);
+  
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const currentUser = auth.getUser();
 
+  const [unreadGlobal, setUnreadGlobal] = useState(0); // Đếm tin Kênh Thế Giới
+  const [unreadPrivate, setUnreadPrivate] = useState<Record<number, number>>({}); // Đếm tin 1-1 theo ID người gửi
+
+  // Tính tổng số tin nhắn chưa đọc để hiển thị ở cục tròn to ngoài cùng
+  const totalUnread = unreadGlobal + Object.values(unreadPrivate).reduce((a, b) => a + b, 0);
+
+  // 1. Kết nối Socket & Tải danh bạ
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const res = await api.getFriends();
-        if (mounted && res?.ok) setFriends(res.friends || []);
-      } catch (e) {
-        // ignore
+    if (!currentUser) return;
+
+    // Tải danh sách người dùng
+    const fetchUsers = async () => {
+      const res = await api.getUsers();
+      if (res?.ok) {
+        // Lọc bỏ chính mình ra khỏi danh bạ
+        setUsersList(res.users.filter((u: ChatUser) => u.id !== currentUser.id));
       }
-    })();
-
-    return () => { mounted = false; };
-  }, []);
-
-  const filteredFriends = friends.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
-  const onlineFriends = filteredFriends.filter(f => f.status !== "offline");
-  const offlineFriends = filteredFriends.filter(f => f.status === "offline");
-
-  const handleSendMessage = () => {
-    if (!newMessage.trim()) return;
-    const message: Message = { id: messages.length + 1, text: newMessage, sender: "me", time: new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) };
-    setMessages((m) => [...m, message]);
-
-    if (selectedFriend) {
-      try {
-        const socket = socketRef.current;
-        if (socket && socket.connected) {
-          socket.emit("message", { room: `room-${selectedFriend.id}`, message: newMessage, sender: "me" });
-        }
-      } catch (e) {
-        // ignore
-      }
-    }
-
-    setNewMessage("");
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-
-  const statusColor = {
-    online: "text-neon-green fill-neon-green",
-    playing: "text-neon-cyan fill-neon-cyan",
-    offline: "text-muted-foreground fill-muted-foreground",
-  } as const;
-
-  useEffect(() => {
-    if (!selectedFriend) return;
-    const socket = api.createSocket();
-    socketRef.current = socket;
-
-    socket.emit("joinRoom", `room-${selectedFriend.id}`);
-
-    const onMessage = (payload: any) => {
-      setMessages((m) => [...m, { id: payload.id || Date.now(), text: payload.message, sender: payload.sender === "me" ? "me" : "friend", time: new Date(payload.time).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) }]);
     };
+    fetchUsers();
 
-    socket.on("message", onMessage);
+    const newSocket = io(import.meta.env.VITE_API_BASE || "http://localhost:4000", { transports: ["websocket"] });
+    setSocket(newSocket);
 
-    return () => {
-      socket.off("message", onMessage);
-    };
-  }, [selectedFriend]);
-  return (
-    <>
-      {/* Floating Action Button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${
-          isOpen 
-            ? 'bg-muted hover:bg-muted/80' 
-            : 'bg-gradient-gaming hover:shadow-[0_0_30px_hsl(var(--neon-cyan)/0.5)] hover:scale-110'
-        }`}
-      >
-        {isOpen ? (
-          <Minimize2 className="w-6 h-6 text-foreground" />
-        ) : (
-          <>
-            <MessageCircle className="w-6 h-6 text-primary-foreground" />
-            {/* Notification Badge */}
+    // BÁO DANH: Đăng ký phòng riêng cho user này
+    newSocket.emit("register_user", { id: currentUser.id, username: currentUser.username });
+
+    // Nghe tin nhắn Thế Giới
+    newSocket.on("receive_global_message", (newMessage: ChatMessage) => {
+      setGlobalMessages((prev) => [...prev, newMessage]);
+      
+      // Nếu không mở khung chat, hoặc đang mở nhưng KHÔNG ở Kênh Thế Giới -> Tăng số đếm
+      setIsOpen((currentIsOpen) => {
+        setView((currentView) => {
+          if (!currentIsOpen || currentView !== "global") {
+            setUnreadGlobal((prev) => prev + 1);
+          }
+          return currentView;
+        });
+        return currentIsOpen;
+      });
+    });
+
+   // Nghe tin nhắn Cá Nhân (1-1)
+    newSocket.on("receive_private_message", (newMessage: ChatMessage) => {
+      setPrivateMessages((prev) => [...prev, newMessage]);
+      
+      const isMe = newMessage.sender_id === currentUser.id;
+      
+      // Nếu mình là người gửi, hệ thống trả về để cập nhật UI -> KHÔNG làm gì thêm
+      if (isMe) return;
+
+      // Nếu là tin nhắn người khác gửi đến
+      setIsOpen((currentIsOpen) => {
+        setView((currentView) => {
+          setTargetUser((currentTargetUser) => {
+            const isChattingWithThem = currentIsOpen && currentView === "private" && currentTargetUser?.id === newMessage.sender_id;
             
-          </>
-        )}
-      </button>
+            // Nếu không đang chat trực tiếp với họ -> Báo Popup và Tăng số đếm
+            if (!isChattingWithThem) {
+              // Hiện popup (Fix lỗi text dài bằng line-clamp-2)
+              toast({ 
+                title: `Tin nhắn từ ${newMessage.username}`, 
+                description: <div className="line-clamp-2 break-words text-sm opacity-90">{newMessage.content}</div> 
+              });
 
-      {/* Chat Window */}
+              // Tăng số đếm cho riêng ID của người gửi này
+              setUnreadPrivate((prev) => ({
+                ...prev,
+                [newMessage.sender_id]: (prev[newMessage.sender_id] || 0) + 1
+              }));
+            }
+            return currentTargetUser;
+          });
+          return currentView;
+        });
+        return currentIsOpen;
+      });
+    });
+    return () => { newSocket.disconnect(); };
+  }, [currentUser?.id]); // Khởi động lại nếu User đăng nhập/đăng xuất
+
+  // 2. Chuyển phòng & Tải lịch sử chat
+  const openChat = async (type: "global" | "private", user: ChatUser | null = null) => {
+    setView(type);
+    setTargetUser(user);
+    
+    if (type === "global") {
+      setUnreadGlobal(0); // Reset số đếm Thế Giới
+      const res = await api.getGlobalMessages();
+      if (res?.ok) setGlobalMessages(res.messages);
+    } else if (type === "private" && user && currentUser) {
+      setUnreadPrivate((prev) => ({ ...prev, [user.id]: 0 })); // Reset số đếm của người này
+      const res = await api.getPrivateMessages(user.id, currentUser.id);
+      if (res?.ok) setPrivateMessages(res.messages);
+    }
+  };
+
+  // 3. Tự động cuộn
+  useEffect(() => {
+    if (isOpen && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [globalMessages, privateMessages, isOpen, view]);
+
+  // 4. Xử lý Gửi tin nhắn
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || !currentUser || !socket) return;
+    
+    if (view === "global") {
+      socket.emit("send_global_message", { userId: currentUser.id, content: input.trim() });
+    } else if (view === "private" && targetUser) {
+      socket.emit("send_private_message", { 
+        senderId: currentUser.id, 
+        receiverId: targetUser.id, 
+        content: input.trim() 
+      });
+    }
+    setInput("");
+  };
+
+  // Biến lấy danh sách tin nhắn hiện tại theo view
+  const currentMessages = view === "global" ? globalMessages : privateMessages;
+
+  return (
+    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+      
+      {/* KHUNG CHAT ĐƯỢC MỞ */}
       {isOpen && (
-        <div className="fixed bottom-24 right-6 w-80 sm:w-96 h-[500px] glass-card rounded-2xl flex flex-col overflow-hidden z-50 shadow-2xl animate-slide-up border border-primary/30">
-          {/* Glow Effect */}
-          <div className="absolute -inset-1 rounded-2xl bg-gradient-gaming opacity-20 blur-xl -z-10" />
+        <div className="mb-4 w-[350px] sm:w-[400px] h-[500px] glass-card rounded-2xl border border-primary/30 shadow-[0_0_30px_hsl(var(--primary)/0.15)] flex flex-col overflow-hidden animate-slide-up origin-bottom-right">
           
-          {selectedFriend ? (
-            // Chat View
-            <>
-              {/* Chat Header */}
-              <div className="flex items-center gap-3 p-4 border-b border-border/50 bg-card/80">
-                <button 
-                  onClick={() => setSelectedFriend(null)}
-                  className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground"
-                >
+          {/* HEADER CHUNG */}
+          <div className="h-14 bg-background/80 border-b border-border/50 flex items-center justify-between px-4">
+            <div className="flex items-center gap-3">
+              {view !== "list" && (
+                <button onClick={() => setView("list")} className="p-1 hover:bg-muted/50 rounded-lg text-muted-foreground hover:text-foreground">
                   <ArrowLeft className="w-5 h-5" />
                 </button>
-                <div className="relative">
-                  <img 
-                    src={selectedFriend.avatar}
-                    alt={selectedFriend.name}
-                    className="w-10 h-10 rounded-full object-cover border-2 border-primary/50"
-                  />
-                  <Circle className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 ${statusColor[selectedFriend.status]}`} />
+              )}
+              <h3 className="font-bold text-foreground flex items-center gap-2">
+                {view === "list" && "Danh Bạ Trực Tuyến"}
+                {view === "global" && <><Globe className="w-4 h-4 text-primary" /> Kênh Thế Giới</>}
+                {view === "private" && <><User className="w-4 h-4 text-neon-green" /> {targetUser?.username}</>}
+              </h3>
+            </div>
+            
+            {/* NÚT ĐÓNG KHUNG CHAT (MŨI TÊN XUỐNG) */}
+            <button onClick={() => setIsOpen(false)} className="p-2 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground">
+              <ChevronDown className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* MÀN HÌNH 1: DANH BẠ */}
+          {view === "list" && (
+            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-background/30 backdrop-blur-sm">
+              <button 
+                onClick={() => openChat("global")}
+                className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted/50 transition-colors border border-primary/20 bg-primary/5 mb-4 group"
+              >
+                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                  <Globe className="w-5 h-5" />
                 </div>
-                <div className="flex-1">
-                  <p className="font-semibold text-foreground">{selectedFriend.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {selectedFriend.status === "playing" ? `Đang chơi ${selectedFriend.game}` : 
-                     selectedFriend.status === "online" ? "Trực tuyến" : "Ngoại tuyến"}
-                  </p>
+                <div className="text-left flex-1">
+                  <p className="font-bold">Kênh Thế Giới</p>
+                  <p className="text-xs text-muted-foreground">Chat chung với toàn server</p>
                 </div>
-                <button 
-                  onClick={() => setIsOpen(false)}
-                  className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                {/* 🔴 CHẤM ĐỎ: KÊNH THẾ GIỚI */}
+                {unreadGlobal > 0 && (
+                  <span className="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-sm">
+                    {unreadGlobal}
+                  </span>
+                )}
+              </button>
+
+              <div className="flex items-center gap-2 mb-3 px-1">
+                <Users className="w-4 h-4 text-muted-foreground" />
+                <span className="text-xs font-bold text-muted-foreground uppercase">Người chơi khác</span>
               </div>
 
-              {/* Messages */}
-              <div className="flex-1 overflow-y-auto scrollbar-gaming p-4 space-y-3">
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex ${message.sender === "me" ? "justify-end" : "justify-start"}`}
-                  >
-                    <div
-                      className={`max-w-[75%] px-3 py-2 rounded-2xl ${
-                        message.sender === "me"
-                          ? "bg-primary text-primary-foreground rounded-br-sm"
-                          : "bg-muted text-foreground rounded-bl-sm"
-                      }`}
+              <div className="space-y-2">
+                {usersList.length === 0 ? (
+                  <p className="text-sm text-center text-muted-foreground py-4">Chưa có người chơi nào.</p>
+                ) : (
+                  usersList.map((user) => (
+                    <button 
+                      key={user.id} onClick={() => openChat("private", user)}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted/50 transition-colors border border-transparent hover:border-border/50"
                     >
-                      <p className="text-sm">{message.text}</p>
-                      <p className={`text-[10px] mt-1 ${
-                        message.sender === "me" ? "text-primary-foreground/70" : "text-muted-foreground"
-                      }`}>
-                        {message.time}
-                      </p>
-                    </div>
+                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
+                        <User className="w-5 h-5" />
+                      </div>
+                      <div className="text-left flex-1">
+                        <p className="font-medium">{user.username}</p>
+                      </div>
+                      {/* 🔴 CHẤM ĐỎ: BẠN BÈ GỬI */}
+                      {unreadPrivate[user.id] > 0 && (
+                        <span className="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-sm">
+                          {unreadPrivate[user.id]}
+                        </span>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* MÀN HÌNH 2: KHUNG CHAT (Chung cho Global và Private) */}
+          {view !== "list" && (
+            <>
+              {/* Lớp min-h-0 chống tràn khung */}
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-background/30 backdrop-blur-sm">
+                {currentMessages.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-50">
+                    <MessageCircle className="w-12 h-12 mb-2" />
+                    <p className="text-sm">Bắt đầu trò chuyện ngay!</p>
                   </div>
-                ))}
+                ) : (
+                  currentMessages.map((msg, index) => {
+                    const isMe = currentUser?.id === msg.sender_id;
+                    return (
+                      <div key={index} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
+                        {!isMe && (
+                          <span className="text-xs text-muted-foreground mb-1 ml-1 flex items-center gap-1">
+                            {msg.username}
+                          </span>
+                        )}
+                        {/* Lớp break-words whitespace-pre-wrap chống đâm thủng chiều ngang */}
+                        <div className={`max-w-[80%] px-4 py-2 rounded-2xl text-sm break-words whitespace-pre-wrap ${isMe ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-muted/80 text-foreground border border-border/50 rounded-tl-sm"}`}>
+                          {msg.content}
+                        </div>  
+                      </div>
+                    );
+                  })
+                )}
+                <div ref={messagesEndRef} />
               </div>
 
-              {/* Message Input */}
-              <div className="p-3 border-t border-border/50 bg-card/80">
-                <div className="flex items-center gap-2">
+              {/* Ô NHẬP TIN NHẮN */}
+              <div className="p-3 bg-background/80 border-t border-border/50">
+                <form onSubmit={handleSendMessage} className="relative flex items-center gap-2">
                   <input
-                    type="text"
-                    placeholder="Nhập tin nhắn..."
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    className="flex-1 h-10 px-4 rounded-full bg-muted/50 border border-border/50 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
+                    type="text" placeholder="Nhập tin nhắn..." value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    className="flex-1 h-10 pl-4 pr-10 rounded-xl bg-muted/50 border border-border/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
                   />
-                  <Button 
-                    variant="gaming" 
-                    size="icon" 
-                    className="rounded-full h-10 w-10"
-                    onClick={handleSendMessage}
-                    disabled={!newMessage.trim()}
-                  >
+                  <Button type="submit" variant="gaming" size="icon" className="h-10 w-10 shrink-0 rounded-xl" disabled={!input.trim()}>
                     <Send className="w-4 h-4" />
                   </Button>
-                </div>
-              </div>
-            </>
-          ) : (
-            // Friends List View
-            <>
-              {/* Header */}
-              <div className="flex items-center justify-between p-4 border-b border-border/50 bg-card/80">
-                <div className="flex items-center gap-2">
-                  <MessageCircle className="w-5 h-5 text-primary" />
-                  <h2 className="font-display font-semibold text-foreground">Chat</h2>
-                  <span className="px-2 py-0.5 text-xs rounded-full bg-neon-green/20 text-neon-green">
-                    {onlineFriends.length} online
-                  </span>
-                </div>
-                <button 
-                  onClick={() => setIsOpen(false)}
-                  className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Search */}
-              <div className="p-3 border-b border-border/30">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input
-                    type="text"
-                    placeholder="Tìm bạn bè..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full h-9 pl-9 pr-4 rounded-lg bg-muted/50 border border-border/50 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
-                  />
-                </div>
-              </div>
-
-              {/* Friends List */}
-              <div className="flex-1 overflow-y-auto scrollbar-gaming">
-                {/* Online Friends */}
-                {onlineFriends.length > 0 && (
-                  <div className="p-3">
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                      Đang hoạt động
-                    </p>
-                    <div className="space-y-1">
-                      {onlineFriends.map(friend => (
-                        <button
-                          key={friend.id}
-                          onClick={() => setSelectedFriend(friend)}
-                          className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-muted/30 transition-colors text-left"
-                        >
-                          <div className="relative">
-                            <img 
-                              src={friend.avatar}
-                              alt={friend.name}
-                              className="w-10 h-10 rounded-full object-cover border-2 border-primary/30"
-                            />
-                            <Circle className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 ${statusColor[friend.status]}`} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm text-foreground truncate">{friend.name}</p>
-                            <p className="text-xs text-muted-foreground truncate">{friend.lastMessage}</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Offline Friends */}
-                {offlineFriends.length > 0 && (
-                  <div className="p-3 pt-0">
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                      Ngoại tuyến
-                    </p>
-                    <div className="space-y-1">
-                      {offlineFriends.map(friend => (
-                        <button
-                          key={friend.id}
-                          onClick={() => setSelectedFriend(friend)}
-                          className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-muted/30 transition-colors text-left opacity-60"
-                        >
-                          <div className="relative">
-                            <img 
-                              src={friend.avatar}
-                              alt={friend.name}
-                              className="w-10 h-10 rounded-full object-cover border border-muted"
-                            />
-                            <Circle className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 ${statusColor[friend.status]}`} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm text-muted-foreground truncate">{friend.name}</p>
-                            <p className="text-xs text-muted-foreground truncate">{friend.lastMessage}</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                </form>
               </div>
             </>
           )}
         </div>
       )}
-    </>
+
+      {/* NÚT BONG BÓNG MỞ CHAT NGOÀI CÙNG (Cố định ở góc dưới bên phải) */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={`relative flex items-center justify-center w-14 h-14 rounded-full shadow-2xl transition-all duration-300 hover:scale-110 active:scale-95 ${isOpen ? "bg-muted text-foreground" : "bg-primary text-primary-foreground shadow-[0_0_20px_hsl(var(--primary)/0.5)]"}`}
+      >
+        {isOpen ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
+        
+        {/* 🔴 CHẤM ĐỎ TỔNG: HIỂN THỊ TRÊN ICON NGOÀI CÙNG KHI ĐÓNG CHAT */}
+        {totalUnread > 0 && !isOpen && (
+          <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-md animate-bounce">
+            {totalUnread > 99 ? '99+' : totalUnread}
+          </span>
+        )}
+      </button>
+
+    </div>
   );
 };
 

@@ -104,6 +104,40 @@ export async function googleLogin(credential: string) {
   return postJSON("/api/auth/google", { credential });
 }
 
+export async function getGlobalMessages() {
+  const baseUrl = import.meta.env.VITE_API_BASE || "http://localhost:4000";
+  try {
+    // Dùng trực tiếp API fetch chuẩn của trình duyệt
+    const response = await fetch(`${baseUrl}/api/messages/global`);
+    return await response.json();
+  } catch (error) {
+    console.error("Lỗi khi gọi API lịch sử chat:", error);
+    return { ok: false, messages: [] };
+  }
+}
+
+// 1. Lấy danh bạ người chơi
+export async function getUsers() {
+  const baseUrl = import.meta.env.VITE_API_BASE || "http://localhost:4000";
+  try {
+    const response = await fetch(`${baseUrl}/api/auth/users`);
+    return await response.json();
+  } catch (error) {
+    return { ok: false, users: [] };
+  }
+}
+
+// 2. Lấy lịch sử chat 1-1
+export async function getPrivateMessages(friendId: number, myUserId: number) {
+  const baseUrl = import.meta.env.VITE_API_BASE || "http://localhost:4000";
+  try {
+    const response = await fetch(`${baseUrl}/api/messages/private/${friendId}?userId=${myUserId}`);
+    return await response.json();
+  } catch (error) {
+    return { ok: false, messages: [] };
+  }
+}
+
 // ===== XUẤT KHẨU TẤT CẢ ĐỂ CÁC FILE KHÁC DÙNG ĐƯỢC =====
 export default { 
   register, 
@@ -123,6 +157,10 @@ export default {
   setupSmsMfa,
   enableSmsMfa,
   requestDisableSms,
-  googleLogin
+  googleLogin,
+  getGlobalMessages,
+  getUsers,
+  getPrivateMessages
+
 
 };
