@@ -6,6 +6,8 @@ const speakeasy = require('speakeasy');
 const qrcode = require('qrcode');
 const { getPool, sql } = require('../db');
 const { requireAuth } = require('../middleware/auth');
+const twilio = require('twilio');
+const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
 // Thêm thư viện Google vào đầu file (Dưới các require khác)
 const { OAuth2Client } = require('google-auth-library');
@@ -83,11 +85,27 @@ router.post("/google", async (req, res) => {
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         await pool.request().input('id', sql.Int, user.id).input('otp', sql.NVarChar(6), otp).query(`UPDATE dbo.users SET sms_otp = @otp, sms_otp_expiry = DATEADD(minute, 5, GETUTCDATE()) WHERE id = @id`);
         
-        console.log(`\n=========================================`);
-        console.log(`👤 User: ${user.username} (${email}) [Đăng nhập bằng Google]`);
-        console.log(`📱 [MÔ PHỎNG SMS] Gửi tới số: ${user.phone}`);
-        console.log(`🔑 Mã ĐĂNG NHẬP Nexus Games của bạn là: ${otp}`);
-        console.log(`=========================================\n`);
+        // Gửi SMS thật qua Twilio
+      try {
+        // Lưu ý: Số điện thoại người nhận (req.body.phone) phải có mã vùng +84 (VD: +84912345678)
+        const userPhone = req.body.phone; 
+
+        await twilioClient.messages.create({
+          body: `[Nexus Games] Ma xac nhan OTP cua ban la: ${otp}. Vui long khong chia se ma nay cho bat ky ai.`,
+          from: process.env.TWILIO_PHONE_NUMBER,
+          to: userPhone 
+        });
+        
+        console.log(`[Twilio] 🚀 Đã gửi SMS OTP thành công đến số ${userPhone}`);
+        
+        // Trả về Frontend báo thành công
+        res.json({ ok: true, message: "Đã gửi mã OTP qua SMS." });
+
+      } catch (twilioError) {
+        console.error("[Twilio] 🔴 Lỗi gửi SMS:", twilioError);
+        // Nếu dùng tài khoản Trial mà gửi cho số chưa Verify, nó sẽ quăng lỗi vào đây
+        res.status(500).json({ error: "Lỗi hệ thống gửi tin nhắn SMS. Vui lòng thử lại sau." });
+      }
         
         const tempToken = jwt.sign({ id: user.id, email, username: user.username, mfaPending: true, mfaType: 'sms' }, JWT_SECRET, { expiresIn: '5m' });
         return res.json({ ok: true, mfaRequired: true, mfaType: 'sms', phoneMask: user.phone ? user.phone.slice(-4) : "", tempToken, message: "Mã OTP đã được gửi về số điện thoại" });
