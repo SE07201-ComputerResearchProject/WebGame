@@ -1,6 +1,7 @@
 import { Lock, Star, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import SubmitScoreModal from "./SubmitScoreModal";
 import auth from "@/lib/auth";
 
@@ -28,6 +29,7 @@ const GameCard = ({
   isCompact = false
 }: GameCardProps) => {
   const [showSubmit, setShowSubmit] = useState(false);
+  const navigate = useNavigate();
   return (
     <div className={`game-card group cursor-pointer ${isFeatured && !isCompact ? 'col-span-2 row-span-2' : ''}`}>
       {/* Image */}
@@ -97,7 +99,7 @@ const GameCard = ({
               </Button>
             ) : (
               <div className="flex items-center gap-2">
-                <Button variant="gaming" size="sm">
+                <Button variant="gaming" size="sm" onClick={() => navigate('/play/1')}>
                   Chơi
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setShowSubmit(true)}>
@@ -115,6 +117,7 @@ const GameCard = ({
             variant={isLocked ? "neon" : "gaming"} 
             size="sm" 
             className="w-full mt-2 h-7 text-xs"
+            onClick={() => !isLocked && navigate('/play/1')}
           >
             {isLocked ? 'Mở khóa' : 'Chơi ngay'}
           </Button>

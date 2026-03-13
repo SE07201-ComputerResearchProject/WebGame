@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Users, MessageCircle, UserPlus, Search, Circle } from "lucide-react";
+import { X, Users, MessageCircle, UserPlus, Search, Circle, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
 import AddFriendModal from "./AddFriendModal";
@@ -61,9 +61,14 @@ const FriendsSidebar = ({ isOpen, onClose, onOpenChat }: FriendsSidebarProps) =>
               {onlineFriends.length} online
             </span>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button onClick={onClose} className="p-2 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center">
+              <ChevronRight className="w-5 h-5" />
+            </button>
+            <button onClick={onClose} className="p-2 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         <div className="p-4">

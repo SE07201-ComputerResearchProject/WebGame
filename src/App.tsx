@@ -9,6 +9,7 @@ import LeaderboardPage from "./pages/LeaderboardPage";
 import FriendsPage from "./pages/FriendsPage";
 import MessagesPage from "./pages/MessagesPage";
 import NotFound from "./pages/NotFound";
+import PlayGamePage from "./pages/PlayGamePage";
 
 const queryClient = new QueryClient();
 
@@ -24,6 +25,7 @@ const App = () => (
           <Route path="/leaderboard" element={<LeaderboardPage />} />
           <Route path="/friends" element={<FriendsPage />} />
           <Route path="/messages" element={<MessagesPage />} />
+          <Route path="/play/:id" element={<PlayGamePage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
