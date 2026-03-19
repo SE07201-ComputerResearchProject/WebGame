@@ -97,7 +97,7 @@ export async function enableSmsMfa(payload: { code: string }) {
 }
 
 export async function requestDisableSms() {
-  return postJSON("/api/auth/mfa/request-disable-sms", {});
+  return postJSON("/api/auth/mfa/request-disable", {});
 }
 
 export async function googleLogin(credential: string) {
@@ -138,6 +138,8 @@ export async function getPrivateMessages(friendId: number, myUserId: number) {
   }
 }
 
+
+
 // ===== XUẤT KHẨU TẤT CẢ ĐỂ CÁC FILE KHÁC DÙNG ĐƯỢC =====
 export default { 
   register, 
@@ -160,7 +162,9 @@ export default {
   googleLogin,
   getGlobalMessages,
   getUsers,
-  getPrivateMessages
+  getPrivateMessages,
+  
+
 
 
 };
