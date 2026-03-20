@@ -60,11 +60,7 @@ const Index = () => {
         onClose={() => setIsWalletOpen(false)} 
       />
       
-      {/* 4. Nhúng giao diện quét mã QR vào trang */}
-      <MfaSetupModal 
-        isOpen={isMfaOpen} 
-        onClose={() => setIsMfaOpen(false)} 
-      />
+      
     </div>
   );
 };

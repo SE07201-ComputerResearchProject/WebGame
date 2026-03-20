@@ -28,4 +28,14 @@ const requireAuth = (req, res, next) => {
   }
 };
 
-module.exports = { requireAuth };
+// Trạm gác: Chỉ cho phép Admin đi qua
+const requireAdmin = (req, res, next) => {
+  // req.user đã được giải mã từ token ở bước requireAuth trước đó
+  if (req.user && req.user.role === 'admin') {
+    next(); // Hợp lệ, cho đi tiếp
+  } else {
+    res.status(403).json({ error: "Truy cập bị từ chối. Khu vực dành riêng cho Admin." });
+  }
+};
+
+module.exports = { requireAuth, requireAdmin };

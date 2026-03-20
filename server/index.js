@@ -14,6 +14,7 @@ const gamesRouter = require('./routes/games');
 const leaderboardRouter = require('./routes/leaderboard');
 const friendsRouter = require('./routes/friends');
 const messagesRouter = require('./routes/messages');
+const adminRouter = require('./routes/admin');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -137,7 +138,7 @@ db.init()
     app.use('/api/leaderboard', leaderboardRouter);
     app.use('/api/friends', friendsRouter);
     app.use('/api/messages', messagesRouter);
-    
+    app.use('/api/admin', adminRouter);
     // Route kiểm tra sức khỏe của Server
     app.get('/', (req, res) => {
       res.json({ ok: true, message: 'Cosy Game Zone API is running smoothly!' });

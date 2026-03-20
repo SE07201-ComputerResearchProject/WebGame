@@ -40,6 +40,13 @@ const FloatingChatWidget = () => {
   // Tính tổng số tin nhắn chưa đọc để hiển thị ở cục tròn to ngoài cùng
   const totalUnread = unreadGlobal + Object.values(unreadPrivate).reduce((a, b) => a + b, 0);
 
+
+
+  // THÊM ĐOẠN NÀY VÀO: Bắn tín hiệu lên Navbar mỗi khi có tin nhắn mới
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('update-unread-messages', { detail: totalUnread }));
+  }, [totalUnread]);
+
   // 1. Kết nối Socket & Tải danh bạ
   useEffect(() => {
     if (!currentUser) return;

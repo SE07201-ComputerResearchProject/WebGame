@@ -138,7 +138,21 @@ export async function getPrivateMessages(friendId: number, myUserId: number) {
   }
 }
 
+export async function getFriendRequests() {
+  const res = await fetch(`${BASE}/api/friends/requests`, { headers: authHeaders() });
+  return res.json();
+}
+export async function sendFriendRequest(payload: { friendId: number }) {
+  return postJSON('/api/friends/add', payload);
+}
+export async function acceptFriendRequest(payload: { requestId: number }) {
+  return postJSON('/api/friends/accept', payload);
+}
 
+export async function getAdminLogs() {
+  const res = await fetch(`${BASE}/api/admin/logs`, { headers: authHeaders() });
+  return res.json();
+}
 
 // ===== XUẤT KHẨU TẤT CẢ ĐỂ CÁC FILE KHÁC DÙNG ĐƯỢC =====
 export default { 
@@ -163,8 +177,10 @@ export default {
   getGlobalMessages,
   getUsers,
   getPrivateMessages,
-  
-
+  getFriendRequests,
+  sendFriendRequest,
+  acceptFriendRequest,
+  getAdminLogs
 
 
 };

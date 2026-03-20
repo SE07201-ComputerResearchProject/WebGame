@@ -1,3 +1,4 @@
+const { logActivity } = require('../utils/logger');
 const express = require("express");
 const router = express.Router();
 const bcrypt = require('bcrypt');
@@ -46,12 +47,21 @@ router.post("/register", async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10);
     const insertResult = await pool.request().input('username', sql.NVarChar(100), username).input('email', sql.NVarChar(255), email).input('password', sql.NVarChar(255), hash).query(`
-        INSERT INTO dbo.users (username, email, password, created_at) VALUES (@username, @email, @password, GETUTCDATE()); SELECT @@IDENTITY as id;
+        INSERT INTO dbo.users (username, email, password, role, created_at) VALUES (@username, @email, @password, 'user', GETUTCDATE()); SELECT @@IDENTITY as id;
       `);
 
-    const user = { id: insertResult.recordset[0].id, username, email };
-    const token = jwt.sign(user, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ ok: true, user, token });
+    // Gán role mặc định là 'user' cho tài khoản mới
+    const userPayload = { id: insertResult.recordset[0].id, username, email, role: 'user' };
+    const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '7d' });
+    
+    // Lấy IP của người dùng từ Request
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+    // Ghi log
+    await logActivity(userPayload.id, 'LOGIN_SUCCESS', `Đăng ký và đăng nhập thành công vào hệ thống`, ip);
+
+    // Đã sửa lỗi: Chỉ trả về res.json đúng 1 lần
+    res.json({ ok: true, user: userPayload, token });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -64,30 +74,35 @@ router.post("/login", async (req, res) => {
     if (!isHuman) return res.status(400).json({ error: "Xác thực người máy thất bại" });
 
     const pool = getPool();
-    const result = await pool.request().input('email', sql.NVarChar(255), email).query(`SELECT id, username, password, mfa_enabled, mfa_type, phone FROM dbo.users WHERE email = @email`);
+    const result = await pool.request().input('email', sql.NVarChar(255), email).query(`SELECT id, username, password, mfa_enabled, mfa_type, phone, role FROM dbo.users WHERE email = @email`);
     if (result.recordset.length === 0) return res.status(401).json({ error: "Sai email hoặc mật khẩu" });
 
     const user = result.recordset[0];
     const isValid = await bcrypt.compare(password, user.password);
     if (!isValid) return res.status(401).json({ error: "Sai email hoặc mật khẩu" });
 
+    // Lấy IP để ghi log
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
     if (user.mfa_enabled) {
+      // Đã sửa lỗi: Nhét thêm user.role vào tempToken để không bị mất quyền Admin
+      const mfaPayload = { id: user.id, email, username: user.username, role: user.role, mfaPending: true };
+      
       if (user.mfa_type === 'sms') {
-        // Giao việc gửi OTP cho Firebase ở Frontend, Backend chỉ trả về phone để Frontend biết đường gửi
-        const tempToken = jwt.sign({ id: user.id, email, username: user.username, mfaPending: true, mfaType: 'sms', phone: user.phone }, JWT_SECRET, { expiresIn: '10m' });
+        const tempToken = jwt.sign({ ...mfaPayload, mfaType: 'sms', phone: user.phone }, JWT_SECRET, { expiresIn: '10m' });
         return res.json({ ok: true, mfaRequired: true, mfaType: 'sms', phoneMask: user.phone.slice(-4), phone: user.phone, tempToken, message: "Đang kết nối Firebase..." });
       } else {
-        const tempToken = jwt.sign({ id: user.id, email, username: user.username, mfaPending: true, mfaType: 'app' }, JWT_SECRET, { expiresIn: '5m' });
+        const tempToken = jwt.sign({ ...mfaPayload, mfaType: 'app' }, JWT_SECRET, { expiresIn: '5m' });
         return res.json({ ok: true, mfaRequired: true, mfaType: 'app', tempToken, message: "Vui lòng nhập mã Google Authenticator" });
       }
     }
 
-    const token = jwt.sign({ id: user.id, email, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ ok: true, user: { id: user.id, username: user.username, email }, token });
+    await logActivity(user.id, 'LOGIN_SUCCESS', `Đăng nhập thành công vào hệ thống`, ip);
+    const token = jwt.sign({ id: user.id, email, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ ok: true, user: { id: user.id, username: user.username, email, role: user.role }, token });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// API: Xử lý Đăng nhập bằng Google
 router.post("/google", async (req, res) => {
   try {
     const { credential } = req.body;
@@ -98,8 +113,9 @@ router.post("/google", async (req, res) => {
     const { email, name } = payload;
     const pool = getPool();
 
-    let result = await pool.request().input('email', sql.NVarChar(255), email).query(`SELECT id, username, mfa_enabled, mfa_type, phone FROM dbo.users WHERE email = @email`);
+    let result = await pool.request().input('email', sql.NVarChar(255), email).query(`SELECT id, username, mfa_enabled, mfa_type, phone, role FROM dbo.users WHERE email = @email`);
     let user;
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
     if (result.recordset.length === 0) {
       const randomPassword = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10);
@@ -110,22 +126,26 @@ router.post("/google", async (req, res) => {
         .input('username', sql.NVarChar(100), baseUsername)
         .input('email', sql.NVarChar(255), email)
         .input('password', sql.NVarChar(255), hash)
-        .query(`INSERT INTO dbo.users (username, email, password, created_at) VALUES (@username, @email, @password, GETUTCDATE()); SELECT @@IDENTITY as id;`);
-      user = { id: insertResult.recordset[0].id, username: baseUsername, email, mfa_enabled: false };
-    } else { user = result.recordset[0]; }
+        .query(`INSERT INTO dbo.users (username, email, password, role, created_at) VALUES (@username, @email, @password, 'user', GETUTCDATE()); SELECT @@IDENTITY as id;`);
+      user = { id: insertResult.recordset[0].id, username: baseUsername, email, role: 'user', mfa_enabled: false };
+    } else { 
+      user = result.recordset[0]; 
+    }
 
     if (user.mfa_enabled) {
+      const mfaPayload = { id: user.id, email, username: user.username, role: user.role, mfaPending: true };
       if (user.mfa_type === 'sms') {
-        const tempToken = jwt.sign({ id: user.id, email, username: user.username, mfaPending: true, mfaType: 'sms', phone: user.phone }, JWT_SECRET, { expiresIn: '10m' });
+        const tempToken = jwt.sign({ ...mfaPayload, mfaType: 'sms', phone: user.phone }, JWT_SECRET, { expiresIn: '10m' });
         return res.json({ ok: true, mfaRequired: true, mfaType: 'sms', phoneMask: user.phone.slice(-4), phone: user.phone, tempToken, message: "Đang kết nối Firebase..." });
       } else {
-        const tempToken = jwt.sign({ id: user.id, email, username: user.username, mfaPending: true, mfaType: 'app' }, JWT_SECRET, { expiresIn: '5m' });
+        const tempToken = jwt.sign({ ...mfaPayload, mfaType: 'app' }, JWT_SECRET, { expiresIn: '5m' });
         return res.json({ ok: true, mfaRequired: true, mfaType: 'app', tempToken, message: "Vui lòng nhập mã Google Authenticator" });
       }
     }
 
-    const token = jwt.sign({ id: user.id, email: user.email, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ ok: true, user: { id: user.id, username: user.username, email: user.email }, token });
+    await logActivity(user.id, 'LOGIN_SUCCESS', `Đăng nhập Google thành công`, ip);
+    const token = jwt.sign({ id: user.id, email: user.email, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ ok: true, user: { id: user.id, username: user.username, email: user.email, role: user.role }, token });
   } catch (err) { res.status(500).json({ error: "Lỗi xác thực với Google" }); }
 });
 
@@ -142,7 +162,6 @@ router.post("/login/mfa", async (req, res) => {
     const pool = getPool();
     
     if (decoded.mfaType === 'sms') {
-      // Firebase đã check mã OTP. Frontend gửi "firebase_ok" để xác nhận
       if (code !== "firebase_ok") return res.status(401).json({ error: "Lỗi xác thực Firebase!" });
     } else {
       const result = await pool.request().input('id', sql.Int, decoded.id).query(`SELECT mfa_secret FROM dbo.users WHERE id = @id`);
@@ -150,8 +169,12 @@ router.post("/login/mfa", async (req, res) => {
       if (!verified) return res.status(401).json({ error: "Mã xác thực không chính xác" });
     }
 
-    const realToken = jwt.sign({ id: decoded.id, email: decoded.email, username: decoded.username }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ ok: true, user: { id: decoded.id, username: decoded.username, email: decoded.email }, token: realToken });
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    await logActivity(decoded.id, 'LOGIN_SUCCESS', `Đăng nhập qua xác thực 2 lớp (MFA) thành công`, ip);
+
+    // Đã sửa lỗi: Gắn lại role cho Token thực tế
+    const realToken = jwt.sign({ id: decoded.id, email: decoded.email, username: decoded.username, role: decoded.role }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ ok: true, user: { id: decoded.id, username: decoded.username, email: decoded.email, role: decoded.role }, token: realToken });
   } catch (err) { res.status(401).json({ error: "Phiên đăng nhập hết hạn" }); }
 });
 
@@ -160,7 +183,6 @@ router.post("/login/mfa", async (req, res) => {
 // ==========================================
 
 router.post("/mfa/setup-sms", requireAuth, async (req, res) => {
-  // Frontend gọi Firebase, Backend chỉ cần trả về OK
   res.json({ ok: true, message: "Firebase is handling SMS" });
 });
 
@@ -171,6 +193,8 @@ router.post("/mfa/enable-sms", requireAuth, async (req, res) => {
     
     const pool = getPool();
     await pool.request().input('id', sql.Int, req.user.id).input('phone', sql.NVarChar(20), phone).query(`UPDATE dbo.users SET mfa_enabled = 1, mfa_type = 'sms', phone = @phone, mfa_secret = NULL WHERE id = @id`);
+    
+    await logActivity(req.user.id, 'MFA_ENABLED', `Bật xác thực bảo mật qua tin nhắn SMS thành công`);
     res.json({ ok: true, message: "Đã bật bảo mật SMS thành công!" });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -179,7 +203,6 @@ router.post("/mfa/request-disable", requireAuth, async (req, res) => {
   try {
     const pool = getPool();
     const result = await pool.request().input('id', sql.Int, req.user.id).query(`SELECT phone FROM dbo.users WHERE id = @id`);
-    // Trả về số điện thoại để Frontend gọi Firebase
     res.json({ ok: true, phone: result.recordset[0].phone });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -203,6 +226,8 @@ router.post("/mfa/enable", requireAuth, async (req, res) => {
     if (!verified) return res.status(400).json({ error: "Mã xác nhận không đúng" });
     
     await pool.request().input('id', sql.Int, req.user.id).query(`UPDATE dbo.users SET mfa_enabled = 1, mfa_type = 'app' WHERE id = @id`);
+    await logActivity(req.user.id, 'MFA_ENABLED', `Bật xác thực bảo mật qua Google Authenticator thành công`);
+    
     res.json({ ok: true, message: "Đã bật bảo mật 2 lớp thành công!" });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -231,9 +256,31 @@ router.post("/mfa/disable", requireAuth, async (req, res) => {
     }
 
     await pool.request().input('id', sql.Int, req.user.id).query(`UPDATE dbo.users SET mfa_enabled = 0, mfa_type = NULL, mfa_secret = NULL, phone = NULL WHERE id = @id`);
+    await logActivity(req.user.id, 'MFA_DISABLED', `Đã tắt tính năng bảo mật 2 lớp (MFA)`);
+    
     res.json({ ok: true, message: "Đã tắt và xóa MFA thành công" });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.get('/me', requireAuth, (req, res) => res.json({ ok: true, user: req.user }));
+
+// Lấy lịch sử hoạt động của chính user đang đăng nhập
+router.get("/me/activity", requireAuth, async (req, res) => {
+  try {
+    const pool = getPool();
+    const result = await pool.request()
+      .input('userId', sql.Int, req.user.id)
+      .query(`
+        SELECT top 50 id, action, description, created_at 
+        FROM dbo.activity_logs 
+        WHERE user_id = @userId 
+        ORDER BY created_at DESC
+      `);
+    res.json({ ok: true, logs: result.recordset });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Đã sửa lỗi: Di chuyển module.exports xuống vị trí dưới cùng của file!
 module.exports = router;
