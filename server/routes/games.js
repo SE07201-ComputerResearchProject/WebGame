@@ -7,9 +7,9 @@ router.get("/", async (req, res) => {
   try {
     const pool = getPool();
     const result = await pool.request().query(`
-      SELECT id, title, category, rating, players, image 
-      FROM dbo.games 
-      ORDER BY id
+     SELECT id, title, category, rating, players, image, game_url
+FROM dbo.games 
+ORDER BY id
     `);
     
     res.json({ ok: true, games: result.recordset });
@@ -28,9 +28,9 @@ router.get("/:id", async (req, res) => {
     const result = await pool.request()
       .input('id', sql.Int, id)
       .query(`
-        SELECT id, title, category, rating, players, image 
-        FROM dbo.games 
-        WHERE id = @id
+        SELECT id, title, category, rating, players, image, game_url
+FROM dbo.games 
+WHERE id = @id
       `);
 
     if (result.recordset.length === 0) {

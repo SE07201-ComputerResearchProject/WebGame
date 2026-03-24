@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { getPool, sql } = require('../db');
 const { requireAuth } = require('../middleware/auth');
-
+const { logActivity } = require('../utils/logger'); 
 // 1. Lấy danh sách bạn bè ĐÃ KẾT BẠN (status = 'accepted')
 router.get("/", requireAuth, async (req, res) => {
   try {

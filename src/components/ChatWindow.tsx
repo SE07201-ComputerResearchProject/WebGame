@@ -29,7 +29,7 @@ const ChatWindow = ({ friend, onClose }: ChatWindowProps) => {
     api.getPrivateMessages(friend.id, currentUser.id).then(res => {
       if (res?.ok) setMessages(res.messages);
     });
-  }, [friend, currentUser]);
+  }, [friend, currentUser?.id]);
 
   // 2. Lắng nghe tin nhắn mới tới qua Socket.io
   useEffect(() => {

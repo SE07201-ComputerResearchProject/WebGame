@@ -47,7 +47,7 @@ const FriendsPage = () => {
     } catch (e) { toast({ title: "Lỗi", description: "Không thể tải dữ liệu", variant: "destructive" }); }
   };
 
-  useEffect(() => { fetchData(); }, [currentUser]);
+  useEffect(() => { fetchData(); }, [currentUser?.id]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

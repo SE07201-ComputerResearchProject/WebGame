@@ -14,33 +14,64 @@ interface GameCardProps {
   isLocked?: boolean;
   isFeatured?: boolean;
   isCompact?: boolean;
+  gameUrl?: string;
 }
 
-const GameCard = ({ 
-  title, 
-  image, 
-  category, 
-  rating, 
-  players, 
-  price, 
+/* ====== BỔ SUNG TYPE CHO EVENT (KHÔNG ĐỔI CODE CŨ) ====== */
+type PlayGameEvent = CustomEvent<{
+  title: string;
+  image: string;
+  gameUrl: string;
+}>;
+
+const GameCard = ({
+  title,
+  image,
+  category,
+  rating,
+  players,
+  price,
   isLocked = false,
   isFeatured = false,
-  isCompact = false
+  isCompact = false,
+  gameUrl
 }: GameCardProps) => {
   const [showSubmit, setShowSubmit] = useState(false);
+
+  /* ====== HÀM PLAY GAME (KHÔNG ĐỔI LOGIC CŨ, CHỈ THÊM TYPE) ====== */
+  const handlePlay = () => {
+    console.log("PLAY CLICK", gameUrl);
+
+    if (!gameUrl) {
+      alert("Game URL chưa có");
+      return;
+    }
+
+    const event: PlayGameEvent = new CustomEvent("playGame", {
+      detail: {
+        title,
+        image,
+        gameUrl
+      }
+    });
+
+    window.dispatchEvent(event);
+  };
+
   return (
-    <div className={`game-card group cursor-pointer ${isFeatured && !isCompact ? 'col-span-2 row-span-2' : ''}`}>
+    <div className={`group cursor-pointer ${isFeatured && !isCompact ? 'col-span-2 row-span-2' : ''}`}>
+      
       {/* Image */}
       <div className={`relative overflow-hidden ${isCompact ? 'aspect-[3/4]' : 'aspect-[4/3]'}`}>
-        <img 
-          src={image} 
+        <img
+          src={image}
           alt={title}
           className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
         />
-        
+
         {/* Overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-card via-card/50 to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
-        
+
         {/* Lock Icon */}
         {isLocked && (
           <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm">
@@ -77,7 +108,7 @@ const GameCard = ({
         <h3 className={`font-display font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1 ${isCompact ? 'text-sm' : 'text-lg'}`}>
           {title}
         </h3>
-        
+
         <div className={`flex items-center justify-between ${isCompact ? 'mt-1.5' : 'mt-3'}`}>
           <div className={`flex items-center gap-2 text-muted-foreground ${isCompact ? 'text-xs' : 'text-sm'}`}>
             <div className="flex items-center gap-1">
@@ -86,10 +117,10 @@ const GameCard = ({
             </div>
             <div className="flex items-center gap-1">
               <Users className={isCompact ? 'w-3 h-3' : 'w-4 h-4'} />
-              <span>{players >= 1000 ? `${(players/1000).toFixed(0)}k` : players}</span>
+              <span>{players >= 1000 ? `${(players / 1000).toFixed(0)}k` : players}</span>
             </div>
           </div>
-          
+
           {!isCompact && (
             isLocked ? (
               <Button variant="neon" size="sm">
@@ -97,27 +128,39 @@ const GameCard = ({
               </Button>
             ) : (
               <div className="flex items-center gap-2">
-                <Button variant="gaming" size="sm">
+                
+                {/* ===== NÚT CHƠI GAME ===== */}
+                <Button variant="gaming" size="sm" onClick={handlePlay}>
                   Chơi
                 </Button>
+
                 <Button variant="ghost" size="sm" onClick={() => setShowSubmit(true)}>
                   Gửi điểm
                 </Button>
-                <SubmitScoreModal isOpen={showSubmit} onClose={() => setShowSubmit(false)} defaultName={auth.getUser()?.username || ''} onSubmitted={() => {}} />
+
+                <SubmitScoreModal
+                  isOpen={showSubmit}
+                  onClose={() => setShowSubmit(false)}
+                  defaultName={auth.getUser()?.username || ''}
+                  onSubmitted={() => {}}
+                />
               </div>
             )
           )}
         </div>
-        
+
         {/* Compact Play Button */}
         {isCompact && (
-          <Button 
-            variant={isLocked ? "neon" : "gaming"} 
-            size="sm" 
-            className="w-full mt-2 h-7 text-xs"
-          >
-            {isLocked ? 'Mở khóa' : 'Chơi ngay'}
-          </Button>
+          <div className="mt-3 flex justify-center">
+            <Button
+              variant={isLocked ? "neon" : "gaming"}
+              size="sm"
+              className="w-full"
+              onClick={handlePlay}
+            >
+              {isLocked ? "Mở khóa" : "Chơi"}
+            </Button>
+          </div>
         )}
       </div>
     </div>

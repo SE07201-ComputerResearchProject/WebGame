@@ -46,7 +46,7 @@ const MessagesPage = () => {
     });
 
     return () => { newSocket.disconnect(); };
-  }, [currentUser]);
+  }, [currentUser?.id]);
 
   const loadChat = async (type: "global" | number) => {
     setActiveChat(type);
