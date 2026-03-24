@@ -118,10 +118,11 @@ export async function getGlobalMessages() {
 
 // 1. Lấy danh bạ người chơi
 export async function getUsers() {
-  const baseUrl = import.meta.env.VITE_API_BASE || "http://localhost:4000";
   try {
-    const response = await fetch(`${baseUrl}/api/auth/users`);
-    return await response.json();
+    const res = await fetch(`${BASE}/api/auth/all-users`, { 
+      headers: authHeaders() 
+    });
+    return await res.json();
   } catch (error) {
     return { ok: false, users: [] };
   }
@@ -154,6 +155,8 @@ export async function getAdminLogs() {
   return res.json();
 }
 
+
+
 // ===== XUẤT KHẨU TẤT CẢ ĐỂ CÁC FILE KHÁC DÙNG ĐƯỢC =====
 export default { 
   register, 
@@ -180,7 +183,9 @@ export default {
   getFriendRequests,
   sendFriendRequest,
   acceptFriendRequest,
-  getAdminLogs
+  getAdminLogs,
+
+
 
 
 };

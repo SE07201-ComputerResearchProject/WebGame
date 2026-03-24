@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { X, Users, MessageCircle, UserPlus, Search, Circle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
-import AddFriendModal from "./AddFriendModal";
 
 interface Friend {
   id: number;
@@ -21,7 +21,7 @@ interface FriendsSidebarProps {
 const FriendsSidebar = ({ isOpen, onClose, onOpenChat }: FriendsSidebarProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [friends, setFriends] = useState<Friend[]>([]);
-  const [showAdd, setShowAdd] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     let mounted = true;
@@ -30,8 +30,10 @@ const FriendsSidebar = ({ isOpen, onClose, onOpenChat }: FriendsSidebarProps) =>
         const res = await api.getFriends();
         if (mounted && res?.ok) {
           const realFriends = res.friends.map((f: any) => ({
-            ...f,
-            avatar: f.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${f.name}`
+            id: f.id,
+            name: f.name,
+            avatar: f.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${f.name}`,
+            status: Math.random() > 0.4 ? "online" : "offline"
           }));
           setFriends(realFriends);
         }
@@ -40,9 +42,15 @@ const FriendsSidebar = ({ isOpen, onClose, onOpenChat }: FriendsSidebarProps) =>
       }
     })();
     return () => { mounted = false; };
-  }, []);
+  }, [isOpen]);
 
-  const filteredFriends = friends.filter(friend => friend.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  // ĐÃ SỬA: Cho phép tìm bạn bè cũ bằng cả tên hoặc ID
+  const safeSearch = searchQuery.toLowerCase().trim();
+  const filteredFriends = friends.filter(friend => 
+    friend.name.toLowerCase().includes(safeSearch) ||
+    friend.id.toString() === safeSearch
+  );
+
   const onlineFriends = filteredFriends.filter(f => f.status !== "offline");
   const offlineFriends = filteredFriends.filter(f => f.status === "offline");
 
@@ -69,11 +77,11 @@ const FriendsSidebar = ({ isOpen, onClose, onOpenChat }: FriendsSidebarProps) =>
         <div className="p-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input type="text" placeholder="Tìm bạn bè..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full h-10 pl-10 pr-4 rounded-lg bg-muted/50 border border-border/50 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all" />
+            <input type="text" placeholder="Tìm tên hoặc ID..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full h-10 pl-10 pr-4 rounded-lg bg-muted/50 border border-border/50 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all" />
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto scrollbar-gaming px-4 pb-4">
+        <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-4">
           {onlineFriends.length > 0 && (
             <div className="mb-6">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Đang hoạt động — {onlineFriends.length}</p>
@@ -95,14 +103,19 @@ const FriendsSidebar = ({ isOpen, onClose, onOpenChat }: FriendsSidebarProps) =>
               </div>
             </div>
           )}
+          
+          {friends.length === 0 && (
+            <div className="text-center text-muted-foreground mt-10">
+              Chưa có bạn bè nào.
+            </div>
+          )}
         </div>
 
         <div className="p-4 border-t border-border/50">
-          <Button variant="neon" className="w-full" onClick={() => setShowAdd(true)}>
-            <UserPlus className="w-4 h-4" /> Thêm bạn bè
+          <Button variant="neon" className="w-full" onClick={() => { onClose(); navigate('/friends'); }}>
+            <UserPlus className="w-4 h-4 mr-2" /> Quản lý kết bạn
           </Button>
         </div>
-        <AddFriendModal isOpen={showAdd} onClose={() => setShowAdd(false)} onAdded={(f) => setFriends((s) => [f, ...s])} />
       </aside>
     </>
   );
@@ -117,7 +130,10 @@ const FriendItem = ({ friend, onChat }: { friend: Friend; onChat: () => void }) 
         <Circle className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 fill-current ${statusColor[friend.status]}`} />
       </div>
       <div className="flex-1 min-w-0">
-        <p className={`font-medium text-sm truncate ${friend.status === "offline" ? "text-muted-foreground" : "text-foreground"}`}>{friend.name}</p>
+        {/* ĐÃ SỬA: Hiện thêm ID bên cạnh tên trong Sidebar */}
+        <p className={`font-medium text-sm truncate ${friend.status === "offline" ? "text-muted-foreground" : "text-foreground"}`}>
+          {friend.name} <span className="text-xs font-normal opacity-50">#{friend.id}</span>
+        </p>
         <p className="text-xs text-muted-foreground truncate">{friend.status === "playing" ? `Đang chơi ${friend.game}` : friend.status === "online" ? "Trực tuyến" : "Ngoại tuyến"}</p>
       </div>
       <button onClick={(e) => { e.stopPropagation(); onChat(); }} className="p-2 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-muted/50 text-muted-foreground hover:text-primary transition-all">

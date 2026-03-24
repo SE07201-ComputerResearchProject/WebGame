@@ -281,6 +281,19 @@ router.get("/me/activity", requireAuth, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
+router.get("/all-users", requireAuth, async (req, res) => {
+  try {
+    const pool = getPool();
+    // Lấy ID và Username của tất cả người dùng trong hệ thống
+    const result = await pool.request().query(`
+      SELECT id, username 
+      FROM dbo.users
+    `);
+    
+    res.json({ ok: true, users: result.recordset });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // Đã sửa lỗi: Di chuyển module.exports xuống vị trí dưới cùng của file!
 module.exports = router;

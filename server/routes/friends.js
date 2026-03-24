@@ -39,8 +39,16 @@ router.get("/requests", requireAuth, async (req, res) => {
 // 3. GỬI lời mời kết bạn
 router.post('/add', requireAuth, async (req, res) => {
   try {
-    const { friendId } = req.body;
-    if (!friendId || friendId === req.user.id) return res.status(400).json({ error: 'ID không hợp lệ' });
+    const friendId = Number(req.body.friendId);
+    // Bắt lỗi rỗng hoặc không phải số
+    if (!friendId || isNaN(friendId)) {
+      return res.status(400).json({ error: 'Mã ID không hợp lệ' });
+    }
+    
+    // Bắt lỗi tự kết bạn với chính mình
+    if (friendId === Number(req.user.id)) {
+      return res.status(400).json({ error: 'Bạn không thể tự kết bạn với chính mình!' });
+    }
 
     const pool = getPool();
     // Kiểm tra xem đã kết bạn chưa
