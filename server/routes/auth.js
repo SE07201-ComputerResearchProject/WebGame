@@ -29,6 +29,30 @@ async function verifyCaptcha(token) {
   }
 }
 
+router.get('/me', requireAuth, async (req, res) => {
+    try {
+        const pool = getPool();
+        // Lấy thông tin user dựa vào ID đang đăng nhập (nhưng tuyệt đối không lấy password)
+        const result = await pool.request()
+            .input('id', sql.Int, req.user.id)
+            .query(`
+                SELECT id, username, email, balance, created_at 
+                FROM dbo.users 
+                WHERE id = @id
+            `);
+
+        if (result.recordset.length === 0) {
+            return res.status(404).json({ error: 'Không tìm thấy người dùng' });
+        }
+
+        // Trả về thông tin user mới nhất
+        res.json({ ok: true, user: result.recordset[0] });
+    } catch (error) {
+        console.error('❌ Lỗi khi lấy thông tin user:', error.message);
+        res.status(500).json({ error: 'Lỗi máy chủ' });
+    }
+});
+
 // ==========================================
 // CÁC API ĐĂNG KÝ / ĐĂNG NHẬP
 // ==========================================

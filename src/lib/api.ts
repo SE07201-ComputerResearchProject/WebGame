@@ -1,5 +1,6 @@
 import { io, Socket } from "socket.io-client";
 import { getToken } from "@/lib/auth";
+import { get } from "http";
 
 const BASE = (import.meta.env.VITE_API_BASE as string) || "http://localhost:4000";
 
@@ -155,7 +156,14 @@ export async function getAdminLogs() {
   return res.json();
 }
 
+export async function createVnPayUrl(payload: { amount: number }) {
+  return postJSON("/api/payment/create_payment_url", payload);
+}
 
+export async function getMe() {
+  const res = await fetch(`${BASE}/api/auth/me`, { headers: authHeaders() });
+  return res.json();
+}
 
 // ===== XUẤT KHẨU TẤT CẢ ĐỂ CÁC FILE KHÁC DÙNG ĐƯỢC =====
 export default { 
@@ -184,8 +192,8 @@ export default {
   sendFriendRequest,
   acceptFriendRequest,
   getAdminLogs,
-
-
+  createVnPayUrl,
+  getMe,
 
 
 };

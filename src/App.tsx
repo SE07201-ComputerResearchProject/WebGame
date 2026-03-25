@@ -10,6 +10,7 @@ import FriendsPage from "./pages/FriendsPage";
 import MessagesPage from "./pages/MessagesPage";
 import NotFound from "./pages/NotFound";
 import GamePlayer from "./components/GamePlayer";
+import WalletReturn from './pages/WalletReturn'; // Nhớ import file vừa tạo nhé
 
 const queryClient = new QueryClient();
 
@@ -27,6 +28,7 @@ const App = () => (
           <Route path="/friends" element={<FriendsPage />} />
           <Route path="/messages" element={<MessagesPage />} />
           <Route path="*" element={<NotFound />} />
+          <Route path="/wallet/return" element={<WalletReturn />} /> {/* Route mới cho VNPay */}
         </Routes>
 
         {/* GAME PLAYER PHẢI NẰM Ở ĐÂY */}

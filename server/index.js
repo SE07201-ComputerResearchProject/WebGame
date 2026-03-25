@@ -21,7 +21,7 @@ const PORT = process.env.PORT || 4000;
 
 // Cấu hình Middleware
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:8080', // Chỉnh URL này trùng với Frontend
+  origin:[process.env.CLIENT_URL || 'http://localhost:8080', 'http://nexusgames.local:8080'], // Chỉnh URL này trùng với Frontend
   credentials: true
 }));
 app.use(express.json());
@@ -32,7 +32,7 @@ const server = http.createServer(app);
 // 3. Khởi tạo "Trạm phát sóng" Socket.io
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:8080',
+    origin: [process.env.CLIENT_URL || 'http://localhost:8080', 'http://nexusgames.local:8080'],
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -46,7 +46,7 @@ io.on('connection', (socket) => {
   // A. ĐĂNG KÝ PHÒNG RIÊNG KHI USER ONLINE
   // ==========================================
   socket.on('register_user', (user) => {
-    // Ép user vào một căn phòng mang mã ID của chính họ (VD: phòng 'user_1')
+    // Ép user vào một căn phòng mang mã ID của chính họ (VD: phòng 'user_1')   
     socket.join(`user_${user.id}`);
     console.log(`[Socket] 👤 User ${user.username} (ID: ${user.id}) đã vào phòng cá nhân.`);
     
@@ -139,6 +139,7 @@ db.init()
     app.use('/api/friends', friendsRouter);
     app.use('/api/messages', messagesRouter);
     app.use('/api/admin', adminRouter);
+    app.use('/api/payment', require('./routes/payment'));
     // Route kiểm tra sức khỏe của Server
     app.get('/', (req, res) => {
       res.json({ ok: true, message: 'Cosy Game Zone API is running smoothly!' });
