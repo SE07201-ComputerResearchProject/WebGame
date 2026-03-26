@@ -11,7 +11,7 @@ const { Server } = require('socket.io');
 // Nhập (Import) toàn bộ các file routes đã có sẵn
 const authRouter = require('./routes/auth');
 const gamesRouter = require('./routes/games');
-const leaderboardRouter = require('./routes/leaderboard');
+// const leaderboardRouter = require('./routes/leaderboard');
 const friendsRouter = require('./routes/friends');
 const messagesRouter = require('./routes/messages');
 const adminRouter = require('./routes/admin');
@@ -135,7 +135,7 @@ db.init()
     // Gắn các routes vào đúng đường dẫn (Endpoints)
     app.use('/api/auth', authRouter);
     app.use('/api/games', gamesRouter);
-    app.use('/api/leaderboard', leaderboardRouter);
+    // app.use('/api/leaderboard', leaderboardRouter);
     app.use('/api/friends', friendsRouter);
     app.use('/api/messages', messagesRouter);
     app.use('/api/admin', adminRouter);

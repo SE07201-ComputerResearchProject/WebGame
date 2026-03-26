@@ -36,7 +36,7 @@ router.get('/me', requireAuth, async (req, res) => {
         const result = await pool.request()
             .input('id', sql.Int, req.user.id)
             .query(`
-                SELECT id, username, email, balance, created_at 
+                SELECT id, username, email, balance, role, created_at 
                 FROM dbo.users 
                 WHERE id = @id
             `);
@@ -62,32 +62,84 @@ router.post("/register", async (req, res) => {
     const { username, email, password, captchaToken } = req.body;
     if (!username || !email || !password || !captchaToken) return res.status(400).json({ error: "Vui lòng điền đủ thông tin và xác nhận CAPTCHA" });
 
+    // === BẮT ĐẦU BLOCK VALIDATION BACKEND ===
+    const userRegex = /^[a-zA-Z0-9_]{3,20}$/;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!userRegex.test(username)) {
+      return res.status(400).json({ error: "Tên đăng nhập không hợp lệ (3-20 ký tự, không chứa ký tự đặc biệt)." });
+    }
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: "Định dạng email không hợp lệ." });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: "Mật khẩu phải có ít nhất 6 ký tự." });
+    }
+    // === KẾT THÚC BLOCK VALIDATION ===
+
     const isHuman = await verifyCaptcha(captchaToken);
     if (!isHuman) return res.status(400).json({ error: "Xác thực người máy thất bại" });
 
     const pool = getPool();
-    const checkResult = await pool.request().input('email', sql.NVarChar(255), email).input('username', sql.NVarChar(100), username).query(`SELECT id FROM dbo.users WHERE email = @email OR username = @username`);
-    if (checkResult.recordset.length > 0) return res.status(409).json({ error: "Email hoặc Username đã tồn tại" });
+    // Cập nhật lại câu SQL để tìm chính xác hơn
+    const checkResult = await pool.request()
+        .input('email', sql.NVarChar(255), email)
+        .input('username', sql.NVarChar(100), username)
+        .query(`SELECT id FROM dbo.users WHERE email = @email OR username = @username`);
+        
+    if (checkResult.recordset.length > 0) return res.status(409).json({ error: "Email hoặc Username đã tồn tại trong hệ thống." });
 
     const hash = await bcrypt.hash(password, 10);
-    const insertResult = await pool.request().input('username', sql.NVarChar(100), username).input('email', sql.NVarChar(255), email).input('password', sql.NVarChar(255), hash).query(`
-        INSERT INTO dbo.users (username, email, password, role, created_at) VALUES (@username, @email, @password, 'user', GETUTCDATE()); SELECT @@IDENTITY as id;
+    const insertResult = await pool.request()
+        .input('username', sql.NVarChar(100), username)
+        .input('email', sql.NVarChar(255), email)
+        .input('password', sql.NVarChar(255), hash)
+        .query(`
+        INSERT INTO dbo.users (username, email, password, role, created_at) 
+        VALUES (@username, @email, @password, 'user', GETUTCDATE()); 
+        SELECT @@IDENTITY as id;
       `);
 
-    // Gán role mặc định là 'user' cho tài khoản mới
     const userPayload = { id: insertResult.recordset[0].id, username, email, role: 'user' };
     const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '7d' });
     
-    // Lấy IP của người dùng từ Request
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    await logActivity(userPayload.id, 'REGISTER_SUCCESS', `Đăng ký và đăng nhập thành công vào hệ thống`, ip);
 
-    // Ghi log
-    await logActivity(userPayload.id, 'LOGIN_SUCCESS', `Đăng ký và đăng nhập thành công vào hệ thống`, ip);
-
-    // Đã sửa lỗi: Chỉ trả về res.json đúng 1 lần
     res.json({ ok: true, user: userPayload, token });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+// router.post("/register", async (req, res) => {
+//   try {
+//     const { username, email, password, captchaToken } = req.body;
+//     if (!username || !email || !password || !captchaToken) return res.status(400).json({ error: "Vui lòng điền đủ thông tin và xác nhận CAPTCHA" });
+
+//     const isHuman = await verifyCaptcha(captchaToken);
+//     if (!isHuman) return res.status(400).json({ error: "Xác thực người máy thất bại" });
+
+//     const pool = getPool();
+//     const checkResult = await pool.request().input('email', sql.NVarChar(255), email).input('username', sql.NVarChar(100), username).query(`SELECT id FROM dbo.users WHERE email = @email OR username = @username`);
+//     if (checkResult.recordset.length > 0) return res.status(409).json({ error: "Email hoặc Username đã tồn tại" });
+
+//     const hash = await bcrypt.hash(password, 10);
+//     const insertResult = await pool.request().input('username', sql.NVarChar(100), username).input('email', sql.NVarChar(255), email).input('password', sql.NVarChar(255), hash).query(`
+//         INSERT INTO dbo.users (username, email, password, role, created_at) VALUES (@username, @email, @password, 'user', GETUTCDATE()); SELECT @@IDENTITY as id;
+//       `);
+
+//     // Gán role mặc định là 'user' cho tài khoản mới
+//     const userPayload = { id: insertResult.recordset[0].id, username, email, role: 'user' };
+//     const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '7d' });
+    
+//     // Lấy IP của người dùng từ Request
+//     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+//     // Ghi log
+//     await logActivity(userPayload.id, 'LOGIN_SUCCESS', `Đăng ký và đăng nhập thành công vào hệ thống`, ip);
+
+//     // Đã sửa lỗi: Chỉ trả về res.json đúng 1 lần
+//     res.json({ ok: true, user: userPayload, token });
+//   } catch (err) { res.status(500).json({ error: err.message }); }
+// });
 
 router.post("/login", async (req, res) => {
   try {

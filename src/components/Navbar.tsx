@@ -69,7 +69,7 @@ const Navbar = ({ onAuthClick, onWalletClick }: NavbarProps) => {
 
             <div className="hidden md:flex items-center gap-1">
               <NavItem to="/games" icon={<Gamepad2 className="w-4 h-4" />} label="Games" active={location.pathname === '/games'} />
-              <NavItem to="/leaderboard" icon={<Trophy className="w-4 h-4" />} label="Xếp hạng" active={location.pathname === '/leaderboard'} />
+              {/* <NavItem to="/leaderboard" icon={<Trophy className="w-4 h-4" />} label="Xếp hạng" active={location.pathname === '/leaderboard'} /> */}
               <NavItem to="/friends" icon={<Users className="w-4 h-4" />} label="Bạn bè" active={location.pathname === '/friends'} badge={pendingFriends} />
               <NavItem to="/messages" icon={<MessageCircle className="w-4 h-4" />} label="Tin nhắn" active={location.pathname === '/messages'} badge={unreadMessages} />
             </div>
@@ -116,7 +116,7 @@ const Navbar = ({ onAuthClick, onWalletClick }: NavbarProps) => {
                     )}
                     {/* Nút gọi Modal trực tiếp bằng State (Không dùng CustomEvent nữa) */}
                     <button onClick={() => { setIsProfileMenuOpen(false); setIsMfaModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted/50 transition-colors"><ShieldCheck className="w-4 h-4 text-primary" />Bảo mật MFA</button>
-                    <button onClick={() => { setIsProfileMenuOpen(false); auth.logout(); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors"><LogOut className="w-4 h-4" />Đăng xuất</button>
+                    <button onClick={() => { setIsProfileMenuOpen(false); auth.logout(); window.location.href = "/"; }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors"><LogOut className="w-4 h-4" />Đăng xuất</button>
                   </div>
                 )}
               </div>
@@ -133,7 +133,7 @@ const Navbar = ({ onAuthClick, onWalletClick }: NavbarProps) => {
           <div className="md:hidden py-4 border-t border-border/50 animate-slide-up bg-background">
             <div className="flex flex-col gap-2">
               <MobileNavItem to="/games" icon={<Gamepad2 className="w-5 h-5" />} label="Games" active={location.pathname === '/games'} onClick={() => setIsMenuOpen(false)} />
-              <MobileNavItem to="/leaderboard" icon={<Trophy className="w-5 h-5" />} label="Xếp hạng" active={location.pathname === '/leaderboard'} onClick={() => setIsMenuOpen(false)} />
+              {/* <MobileNavItem to="/leaderboard" icon={<Trophy className="w-5 h-5" />} label="Xếp hạng" active={location.pathname === '/leaderboard'} onClick={() => setIsMenuOpen(false)} /> */}
               <MobileNavItem to="/friends" icon={<Users className="w-5 h-5" />} label="Bạn bè" active={location.pathname === '/friends'} badge={pendingFriends} onClick={() => setIsMenuOpen(false)} />
               <MobileNavItem to="/messages" icon={<MessageCircle className="w-5 h-5" />} label="Tin nhắn" active={location.pathname === '/messages'} badge={unreadMessages} onClick={() => setIsMenuOpen(false)} />
               
@@ -154,7 +154,7 @@ const Navbar = ({ onAuthClick, onWalletClick }: NavbarProps) => {
                     <Button variant="outline" className="w-full justify-start border-border/50" onClick={() => { setIsMenuOpen(false); setIsMfaModalOpen(true); }}>
                       <ShieldCheck className="w-5 h-5 mr-3 text-primary" /> Bảo mật MFA
                     </Button>
-                    <Button variant="ghost" className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => { setIsMenuOpen(false); auth.logout(); }}>
+                    <Button variant="ghost" className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => { setIsMenuOpen(false); auth.logout(); window.location.href = "/"; } }>
                       <LogOut className="w-5 h-5 mr-3" /> Đăng xuất
                     </Button>
                   </>
