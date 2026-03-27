@@ -23,12 +23,7 @@ const ProminentSearchBar = ({ onSearch }: ProminentSearchBarProps) => {
     <section className="relative py-8 -mt-24 z-20">
       <div className="container mx-auto px-4">
         <div className="max-w-4xl mx-auto">
-          {/* Security Demo Notice */}
-          <div className="flex items-center justify-center gap-2 mb-4 text-xs text-neon-orange">
-            <AlertTriangle className="w-3 h-3" />
-            <span className="opacity-70">Demo: Input này có thể bị tấn công XSS/SQLi</span>
-          </div>
-
+       
           {/* Search Bar Container */}
           <form 
             onSubmit={handleSubmit}

@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const querystring = require('qs');
 const { getPool, sql } = require('../db');
 const { requireAuth } = require('../middleware/auth');
-
+const { logActivity } = require('../utils/logger');
 // Hàm format thời gian chuẩn VNPay (YYYYMMDDHHmmss)
 function getVnTime() {
     const date = new Date();
@@ -31,7 +31,7 @@ function sortObject(obj) {
 router.post('/create_payment_url', requireAuth, async (req, res) => {
     try {
         const amount = req.body.amount;
-        if (!amount || amount < 10000) return res.status(400).json({ error: "Số tiền không hợp lệ (Tối thiểu 10,000đ)" });
+        if (!amount || amount < 10000 || amount > 10000000) return res.status(400).json({ error: "Số tiền không hợp lệ (Từ 10,000đ đến 50,000,000đ)" });
 
         const ipAddr = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
         const tmnCode = process.env.VNP_TMNCODE;
@@ -122,6 +122,7 @@ router.get('/vnpay_ipn', async (req, res) => {
                                     
                                 `);
                             console.log("🎉 THÀNH CÔNG: Đã cộng tiền vào CSDL!");
+                            await logActivity(txn.user_id, 'PAYMENT_SUCCESS', `Nạp thành công ${txn.amount.toLocaleString('vi-VN')}đ qua VNPay (Mã GD: ${orderId})`, 'Hệ thống VNPay');
                             return res.status(200).json({ RspCode: '00', Message: 'Success' });
                         } catch (dbErr) {
                             console.error("❌ LỖI TẠI BƯỚC CỘNG TIỀN (SQL):", dbErr.message);
@@ -147,6 +148,24 @@ router.get('/vnpay_ipn', async (req, res) => {
     } catch (err) {
         console.error("❌ LỖI KHÔNG XÁC ĐỊNH:", err.message);
         res.status(200).json({ RspCode: '99', Message: 'Unknown error' });
+    }
+});
+// Lấy lịch sử giao dịch của User đang đăng nhập
+router.get('/history', requireAuth, async (req, res) => {
+    try {
+        const pool = getPool();
+        const result = await pool.request()
+            .input('userId', sql.Int, req.user.id)
+            .query(`
+                SELECT id, amount, vnp_txn_ref, status, created_at 
+                FROM dbo.transactions 
+                WHERE user_id = @userId 
+                ORDER BY created_at DESC
+            `);
+        
+        res.json({ ok: true, transactions: result.recordset });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 module.exports = router;

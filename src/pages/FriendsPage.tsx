@@ -4,16 +4,18 @@ import AuthModal from "@/components/AuthModal";
 import WalletModal from "@/components/WalletModal";
 import Footer from "@/components/Footer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, UserPlus, UserCheck, Search, ShieldCheck, User, Sparkles } from "lucide-react";
+import { Users, UserPlus, UserCheck, Search, ShieldCheck, User, Sparkles, UserMinus, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
 import authStore from "@/lib/auth";
 import { toast } from "@/components/ui/use-toast";
+import { useNavigate } from "react-router-dom"; // Thêm để điều hướng sang trang tin nhắn
 
 const FriendsPage = () => {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isWalletOpen, setIsWalletOpen] = useState(false);
   const currentUser = authStore.getUser();
+  const navigate = useNavigate(); // Khởi tạo hook điều hướng
 
   const [friends, setFriends] = useState<any[]>([]);
   const [requests, setRequests] = useState<any[]>([]);
@@ -38,7 +40,6 @@ const FriendsPage = () => {
       }
       if (usersRes?.ok && usersRes.users) {
         const myFriendsIds = friendsRes?.friends?.map((f: any) => f.id) || [];
-        // ĐÃ SỬA: Ép cả 2 về String để so sánh, đảm bảo ẩn chính mình 100%
         const filteredUsers = usersRes.users.filter((u: any) => 
           String(u.id) !== String(currentUser.id) && !myFriendsIds.includes(u.id)
         );
@@ -76,7 +77,26 @@ const FriendsPage = () => {
     }
   };
 
-  // BỘ LỌC ĐÃ ĐƯỢC NÂNG CẤP: Tìm theo TÊN hoặc ID
+  // ==========================================
+  // HÀM MỚI: XỬ LÝ HỦY KẾT BẠN
+  // ==========================================
+  const handleRemoveFriend = async (friendId: number, friendName: string) => {
+    if (!window.confirm(`Bạn có chắc chắn muốn hủy kết bạn với ${friendName}?`)) return;
+
+    try {
+      const res = await api.removeFriend(friendId);
+      if (res?.ok) {
+        toast({ title: "Thành công", description: `Đã hủy kết bạn với ${friendName}` });
+        // Xóa ngay lập tức khỏi giao diện để tránh phải reload lại toàn bộ
+        setFriends(prev => prev.filter(f => f.id !== friendId));
+      } else {
+        toast({ title: "Lỗi", description: res?.error || "Không thể hủy kết bạn", variant: "destructive" });
+      }
+    } catch (err) {
+      toast({ title: "Lỗi", description: "Mất kết nối máy chủ", variant: "destructive" });
+    }
+  };
+
   const safeQuery = searchQuery.toLowerCase().trim();
   const filteredUsers = allUsers.filter(u => {
     const nameMatch = (u.username || "").toLowerCase().includes(safeQuery);
@@ -96,7 +116,6 @@ const FriendsPage = () => {
           <div>
             <h1 className="text-3xl font-display font-bold text-foreground">Cộng Đồng</h1>
             <p className="text-muted-foreground mb-1">Kết nối và thi đấu cùng hàng triệu game thủ khác</p>
-            {/* Hiển thị ID của bản thân */}
             {currentUser && (
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/30">
                 <span className="text-sm font-medium text-primary">ID của bạn: <strong className="font-mono">#{currentUser.id}</strong></span>
@@ -113,22 +132,49 @@ const FriendsPage = () => {
             <Button variant="gaming" onClick={() => setIsAuthOpen(true)}>Đăng nhập ngay</Button>
           </div>
         ) : (
-          <Tabs defaultValue="add" className="w-full">
+          <Tabs defaultValue="friends" className="w-full">
             <TabsList className="grid w-full grid-cols-3 h-14 bg-muted/50 rounded-xl p-1 mb-8">
               <TabsTrigger value="friends" className="rounded-lg text-base font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><Users className="w-4 h-4 mr-2"/> Bạn bè ({friends.length})</TabsTrigger>
               <TabsTrigger value="requests" className="rounded-lg text-base font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground relative"><UserCheck className="w-4 h-4 mr-2"/> Lời mời {requests.length > 0 && <span className="absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] text-white animate-pulse">{requests.length}</span>}</TabsTrigger>
               <TabsTrigger value="add" className="rounded-lg text-base font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><UserPlus className="w-4 h-4 mr-2"/> Thêm bạn</TabsTrigger>
             </TabsList>
 
+            {/* TAB BẠN BÈ ĐƯỢC CẬP NHẬT GIAO DIỆN HOVER VÀ NÚT TƯƠNG TÁC */}
             <TabsContent value="friends" className="glass-card rounded-2xl p-6 border border-border/50 min-h-[400px]">
               {friends.length === 0 ? <p className="text-center text-muted-foreground mt-20">Bạn chưa có người bạn nào. Hãy tìm thêm bạn mới nhé!</p> : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {friends.map(f => (
-                    <div key={f.id} className="flex items-center gap-4 p-4 rounded-xl bg-muted/30 border border-border/50 hover:border-primary/50 transition-colors">
-                      <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center shrink-0"><User className="w-6 h-6 text-primary" /></div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-lg truncate">{f.name} <span className="text-sm font-normal text-muted-foreground">#{f.id}</span></h3>
-                        <p className="text-xs text-neon-green">Đã kết bạn</p>
+                    <div key={f.id} className="group flex items-center justify-between gap-4 p-4 rounded-xl bg-muted/30 border border-border/50 hover:border-primary/50 transition-all overflow-hidden">
+                      <div className="flex items-center gap-4 min-w-0">
+                        <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                          <User className="w-6 h-6 text-primary" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-bold text-lg truncate">{f.name || f.username} <span className="text-sm font-normal text-muted-foreground">#{f.id}</span></h3>
+                          <p className="text-xs text-neon-green">Đã kết bạn</p>
+                        </div>
+                      </div>
+                      
+                      {/* KHỐI NÚT ACTION (Sẽ hiện ra khi di chuột vào thẻ) */}
+                      <div className="flex items-center gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button 
+                          variant="outline" 
+                          size="icon" 
+                          onClick={() => navigate(`/messages?user=${f.id}`)} 
+                          className="h-9 w-9 border-primary/20 hover:bg-primary/20 hover:text-primary transition-colors" 
+                          title="Nhắn tin"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="icon" 
+                          onClick={() => handleRemoveFriend(f.id, f.name || f.username)} 
+                          className="h-9 w-9 border-destructive/20 hover:bg-destructive/20 hover:text-destructive transition-colors" 
+                          title="Hủy kết bạn"
+                        >
+                          <UserMinus className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -154,7 +200,6 @@ const FriendsPage = () => {
             </TabsContent>
 
             <TabsContent value="add" className="glass-card rounded-2xl p-6 border border-border/50 min-h-[400px] flex flex-col">
-              
               <div className="relative mb-8" ref={searchRef}>
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground w-5 h-5 z-20" />
                 <input 

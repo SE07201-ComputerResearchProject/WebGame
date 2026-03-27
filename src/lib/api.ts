@@ -1,4 +1,4 @@
-import { io, Socket } from "socket.io-client";
+import { Fetch, io, Socket } from "socket.io-client";
 import { getToken } from "@/lib/auth";
 import { get } from "http";
 
@@ -158,6 +158,23 @@ export async function getAdminLogs() {
 
 export async function createVnPayUrl(payload: { amount: number }) {
   return postJSON("/api/payment/create_payment_url", payload);
+} 
+
+export async function changePassword(data: { currentPassword: string; newPassword: string }) {
+  return postJSON("/api/auth/change-password", data);
+}
+
+export async function createPaymentUrl(amount: number) {
+  // Thay fetchAPI rườm rà bằng postJSON gọn nhẹ
+  return postJSON("/api/payment/create_payment_url", { amount }); 
+}
+
+export async function getTransactionHistory() {
+  const res = await fetch(`${BASE}/api/payment/history`, { 
+    method: "GET",
+    headers: authHeaders() 
+  });
+  return res.json();
 }
 
 export async function getMe() {
@@ -165,8 +182,20 @@ export async function getMe() {
   return res.json();
 }
 
-export async function changePassword(data: { currentPassword: string; newPassword: string }) {
-  return postJSON("/api/auth/change-password", data);
+export async function getActivityLogs() {
+  const res = await fetch(`${BASE}/api/auth/me/activity`, {
+    method: "GET",
+     headers: authHeaders() });
+  return res.json();  
+}
+
+export async function removeFriend(friendId: number) {
+  const res = await fetch(`${BASE}/api/friends/remove`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ friendId }),
+  });
+  return res.json();
 }
 // ===== XUẤT KHẨU TẤT CẢ ĐỂ CÁC FILE KHÁC DÙNG ĐƯỢC =====
 export default { 
@@ -198,5 +227,8 @@ export default {
   createVnPayUrl,
   getMe,
   changePassword,
-
+  createPaymentUrl,
+  getTransactionHistory,
+  getActivityLogs,
+  removeFriend,
 };

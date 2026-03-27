@@ -35,6 +35,30 @@ router.get("/requests", requireAuth, async (req, res) => {
     res.json({ ok: true, requests: result.recordset });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+//xóa kb
+
+// Hủy kết bạn (Xóa bạn)
+router.post('/remove', requireAuth, async (req, res) => {
+  try {
+    const { friendId } = req.body;
+    if (!friendId) return res.status(400).json({ error: "Thiếu ID người dùng" });
+
+    const pool = getPool();
+    // Đã đổi tên bảng từ 'dbo.friend_requests' thành 'dbo.friends'
+    await pool.request()
+      .input('userId', sql.Int, req.user.id)
+      .input('friendId', sql.Int, friendId)
+      .query(`
+        DELETE FROM dbo.friends 
+        WHERE (user_id = @userId AND friend_id = @friendId) 
+           OR (user_id = @friendId AND friend_id = @userId)
+      `);
+
+    res.json({ ok: true, message: "Đã hủy kết bạn thành công" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // 3. GỬI lời mời kết bạn
 router.post('/add', requireAuth, async (req, res) => {
