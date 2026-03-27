@@ -165,6 +165,9 @@ export async function getMe() {
   return res.json();
 }
 
+export async function changePassword(data: { currentPassword: string; newPassword: string }) {
+  return postJSON("/api/auth/change-password", data);
+}
 // ===== XUẤT KHẨU TẤT CẢ ĐỂ CÁC FILE KHÁC DÙNG ĐƯỢC =====
 export default { 
   register, 
@@ -194,6 +197,6 @@ export default {
   getAdminLogs,
   createVnPayUrl,
   getMe,
-
+  changePassword,
 
 };

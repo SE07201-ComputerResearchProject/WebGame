@@ -3,8 +3,9 @@ import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import auth from "@/lib/auth";
 import api from "@/lib/api";
-import { Gamepad2, User, Wallet, Trophy, Users, MessageCircle, Menu, X, Search, Sparkles, ShieldCheck, LogOut, ChevronDown, ShieldAlert } from "lucide-react";
+import { Gamepad2, User, Wallet, Trophy, Users, MessageCircle, Menu, X, Search, Sparkles, ShieldCheck, LogOut, ChevronDown, ShieldAlert, KeyRound } from "lucide-react";
 import MfaSetupModal from "@/components/MfaSetupModal";
+import ChangePasswordModal from "./ChangePasswordModal";
 
 interface NavbarProps { onAuthClick: () => void; onWalletClick: () => void; }
 
@@ -15,10 +16,11 @@ const Navbar = ({ onAuthClick, onWalletClick }: NavbarProps) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
-  // STATE QUẢN LÝ CHẤM ĐỎ VÀ MODAL MFA
+  // STATE QUẢN LÝ CHẤM ĐỎ VÀ MODAL
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [pendingFriends, setPendingFriends] = useState(0);
   const [isMfaModalOpen, setIsMfaModalOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   useEffect(() => {
     const handler = () => setUser(auth.getUser());
@@ -54,8 +56,9 @@ const Navbar = ({ onAuthClick, onWalletClick }: NavbarProps) => {
   }, []);
 
   return (
+    <>
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border/50 shadow-sm">
-      <div className="container mx-auto px-4">
+        <div className="container mx-auto px-4">
         
         {/* BỐ CỤC CHUẨN: CHIA LÀM 3 CỤM RÕ RÀNG TRÁI - GIỮA - PHẢI */}
         <div className="flex items-center justify-between h-16 gap-4">
@@ -114,8 +117,15 @@ const Navbar = ({ onAuthClick, onWalletClick }: NavbarProps) => {
                         Quản trị hệ thống
                       </Link>
                     )}
-                    {/* Nút gọi Modal trực tiếp bằng State (Không dùng CustomEvent nữa) */}
-                    <button onClick={() => { setIsProfileMenuOpen(false); setIsMfaModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted/50 transition-colors"><ShieldCheck className="w-4 h-4 text-primary" />Bảo mật MFA</button>
+                    
+                    {/* NÚT BẢO MẬT VÀ ĐỔI MẬT KHẨU (DESKTOP) */}
+                    <button onClick={() => { setIsProfileMenuOpen(false); setIsChangePasswordOpen(true); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted/50 transition-colors">
+                      <KeyRound className="w-4 h-4 text-primary" />Đổi mật khẩu
+                    </button>
+                    <button onClick={() => { setIsProfileMenuOpen(false); setIsMfaModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted/50 transition-colors">
+                      <ShieldCheck className="w-4 h-4 text-primary" />Bảo mật MFA
+                    </button>
+                    
                     <button onClick={() => { setIsProfileMenuOpen(false); auth.logout(); window.location.href = "/"; }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors"><LogOut className="w-4 h-4" />Đăng xuất</button>
                   </div>
                 )}
@@ -151,9 +161,15 @@ const Navbar = ({ onAuthClick, onWalletClick }: NavbarProps) => {
                          </Button>
                        </Link>
                     )}
+                    
+                    {/* NÚT BẢO MẬT VÀ ĐỔI MẬT KHẨU (MOBILE) */}
+                    <Button variant="outline" className="w-full justify-start border-border/50" onClick={() => { setIsMenuOpen(false); setIsChangePasswordOpen(true); }}>
+                      <KeyRound className="w-5 h-5 mr-3 text-primary" /> Đổi mật khẩu
+                    </Button>
                     <Button variant="outline" className="w-full justify-start border-border/50" onClick={() => { setIsMenuOpen(false); setIsMfaModalOpen(true); }}>
                       <ShieldCheck className="w-5 h-5 mr-3 text-primary" /> Bảo mật MFA
                     </Button>
+                    
                     <Button variant="ghost" className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => { setIsMenuOpen(false); auth.logout(); window.location.href = "/"; } }>
                       <LogOut className="w-5 h-5 mr-3" /> Đăng xuất
                     </Button>
@@ -169,9 +185,12 @@ const Navbar = ({ onAuthClick, onWalletClick }: NavbarProps) => {
         )}
       </div>
       
-      {/* Modal nay sẽ đi theo Navbar đến mọi ngóc ngách của hệ thống */}
-      <MfaSetupModal isOpen={isMfaModalOpen} onClose={() => setIsMfaModalOpen(false)} />
+     
     </nav>
+     {/* CÁC MODAL ĐI THEO NAVBAR */}
+      <MfaSetupModal isOpen={isMfaModalOpen} onClose={() => setIsMfaModalOpen(false)} />
+      <ChangePasswordModal isOpen={isChangePasswordOpen} onClose={() => setIsChangePasswordOpen(false)} />
+    </>
   );
 };
 

@@ -179,6 +179,49 @@ router.post("/login", async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+router.post("/change-password", requireAuth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: "Vui lòng nhập đầy đủ thông tin" });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: "Mật khẩu mới phải có ít nhất 6 ký tự" });
+    }
+
+    const pool = getPool();
+    // 1. Lấy user hiện tại để kiểm tra pass cũ
+    const userRes = await pool.request()
+      .input('id', sql.Int, req.user.id)
+      .query(`SELECT password FROM dbo.users WHERE id = @id`);
+
+    if (userRes.recordset.length === 0) {
+      return res.status(404).json({ error: "Người dùng không tồn tại" });
+    }
+
+    // 2. So sánh pass cũ
+    const isValid = await bcrypt.compare(currentPassword, userRes.recordset[0].password);
+    if (!isValid) {
+      return res.status(400).json({ error: "Mật khẩu hiện tại không đúng!" });
+    }
+
+    // 3. Hash pass mới và cập nhật vào CSDL
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await pool.request()
+      .input('id', sql.Int, req.user.id)
+      .input('newPassword', sql.NVarChar(255), newHash)
+      .query(`UPDATE dbo.users SET password = @newPassword WHERE id = @id`);
+
+    // 4. Ghi log tự động
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    await logActivity(req.user.id, 'CHANGE_PASSWORD', `Người dùng đổi mật khẩu thành công`, ip);
+
+    res.json({ ok: true, message: "Đổi mật khẩu thành công!" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post("/google", async (req, res) => {
   try {
     const { credential } = req.body;
