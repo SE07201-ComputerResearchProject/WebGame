@@ -7,7 +7,7 @@ router.get("/", async (req, res) => {
   try {
     const pool = getPool();
     const result = await pool.request().query(`
-     SELECT id, title, category, rating, players, image, game_url
+     SELECT id, title, category, image, game_url
 FROM dbo.games 
 ORDER BY id
     `);
@@ -28,7 +28,7 @@ router.get("/:id", async (req, res) => {
     const result = await pool.request()
       .input('id', sql.Int, id)
       .query(`
-        SELECT id, title, category, rating, players, image, game_url
+        SELECT id, title, category, image, game_url
 FROM dbo.games 
 WHERE id = @id
       `);
