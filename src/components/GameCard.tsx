@@ -8,8 +8,6 @@ interface GameCardProps {
   title: string;
   image: string;
   category: string;
-  rating: number;
-  players: number;
   price?: number;
   isLocked?: boolean;
   isFeatured?: boolean;
@@ -28,8 +26,6 @@ const GameCard = ({
   title,
   image,
   category,
-  rating,
-  players,
   price,
   isLocked = false,
   isFeatured = false,
@@ -113,11 +109,10 @@ const GameCard = ({
           <div className={`flex items-center gap-2 text-muted-foreground ${isCompact ? 'text-xs' : 'text-sm'}`}>
             <div className="flex items-center gap-1">
               <Star className={`text-neon-orange fill-neon-orange ${isCompact ? 'w-3 h-3' : 'w-4 h-4'}`} />
-              <span>{rating.toFixed(1)}</span>
             </div>
             <div className="flex items-center gap-1">
               <Users className={isCompact ? 'w-3 h-3' : 'w-4 h-4'} />
-              <span>{players >= 1000 ? `${(players / 1000).toFixed(0)}k` : players}</span>
+              
             </div>
           </div>
 
