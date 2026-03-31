@@ -118,7 +118,11 @@ router.get('/vnpay_ipn', async (req, res) => {
                                 .query(`
                                     UPDATE dbo.transactions SET status = 'success' WHERE vnp_txn_ref = @txnRef;
                                     -- Dùng ISNULL để phòng trường hợp cột balance đang bị NULL
-                                    UPDATE dbo.users SET balance = ISNULL(balance, 0) + @amount WHERE id = @userId;
+                                   UPDATE dbo.users 
+SET 
+    balance = ISNULL(balance, 0) + @amount,
+    points = ISNULL(points, 0) + (@amount / 1000) -- 10k = 10 điểm
+WHERE id = @userId;
                                     
                                 `);
                             console.log("🎉 THÀNH CÔNG: Đã cộng tiền vào CSDL!");
