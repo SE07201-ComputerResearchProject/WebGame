@@ -95,6 +95,7 @@ const GameGrid = () => {
                 category={game.category}
                 image={game.image}
                 gameUrl={game.game_url}
+                costPoint={game.cost_point}
                 isCompact
               />
             ))}
