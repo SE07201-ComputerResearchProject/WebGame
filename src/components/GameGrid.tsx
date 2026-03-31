@@ -20,24 +20,24 @@ const GameGrid = () => {
   useEffect(() => {
     let mounted = true;
 
-    const loadGames = async () => {
-      try {
-       const res = await api.getGames();
-console.log("API RESPONSE:", res);
+   const loadGames = async () => {
+  try {
+    const res = await api.getGames();
+    console.log("API RESPONSE:", res);
 
-        if (mounted && res?.ok && Array.isArray(res.games)) {
-          setGames(res.games);
-        } else {
-          console.warn("API trả dữ liệu không đúng:", res);
-          setGames([]);
-        }
-      } catch (error) {
-        console.error("Lỗi khi tải games:", error);
-        setGames([]);
-      } finally {
-        if (mounted) setIsLoading(false);
-      }
-    };
+    if (mounted && Array.isArray(res?.games)) {
+      setGames(res.games);
+    } else {
+      console.warn("API trả dữ liệu sai:", res);
+      setGames([]);
+    }
+  } catch (error) {
+    console.error("Lỗi khi tải games:", error);
+    setGames([]);
+  } finally {
+    if (mounted) setIsLoading(false);
+  }
+};
 
     loadGames();
 
@@ -93,8 +93,6 @@ console.log("API RESPONSE:", res);
                 key={game.id}
                 title={game.title}
                 category={game.category}
-                rating={game.rating}
-                players={game.players}
                 image={game.image}
                 gameUrl={game.game_url}
                 isCompact
