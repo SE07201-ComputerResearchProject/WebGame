@@ -9,14 +9,22 @@ function authHeaders() {
   return token ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
 }
 
-async function postJSON(path: string, body: any) {
+async function postJSON(path: string, body: any, method: string = "POST") {
   const res = await fetch(`${BASE}${path}`, {
-    method: "POST",
+    method: method, // Lấy method được truyền vào, mặc định là POST
     headers: authHeaders(),
     body: JSON.stringify(body),
   });
   return res.json();
 }
+// async function postJSON(path: string, body: any) {
+//   const res = await fetch(`${BASE}${path}`, {
+//     method: "POST",
+//     headers: authHeaders(),
+//     body: JSON.stringify(body),
+//   });
+//   return res.json();
+// }
 
 // ===== CÁC HÀM GỌI API CƠ BẢN =====
 export async function register(payload: { username: string; email: string; password: string; captchaToken?: string | null }) {
@@ -197,7 +205,43 @@ export async function removeFriend(friendId: number) {
   });
   return res.json();
 }
-// ===== XUẤT KHẨU TẤT CẢ ĐỂ CÁC FILE KHÁC DÙNG ĐƯỢC =====
+
+export async function getAdminUsers() {
+  const res = await fetch(`${BASE}/api/admin/users`, { headers: authHeaders() });
+  return res.json();
+}
+
+export async function getAdminTransactions() {
+  const res = await fetch(`${BASE}/api/admin/transactions`, { headers: authHeaders() });
+  return res.json();
+}
+
+export async function getAdminGames() {
+  const res = await fetch(`${BASE}/api/admin/games`, { headers: authHeaders() });
+  return res.json();
+}
+
+export async function updateGameConfig(id: number, payload: { price: number; ad_duration: number; is_active: boolean }) {
+  const res = await fetch(`${BASE}/api/admin/games/${id}`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+export async function updateUserBalance(id: number, amountChange: number) {
+  return postJSON(`/api/admin/users/${id}/balance`, { amountChange }, "PUT");
+}
+
+export async function updateUserRole(id: number, role: string) {
+  return postJSON(`/api/admin/users/${id}/role`, { role }, "PUT");
+}
+
+export async function updateUserStatus(id: number, status: string) {
+  return postJSON(`/api/admin/users/${id}/status`, { status }, "PUT");
+}
+
 export default { 
   register, 
   login, 
@@ -231,4 +275,11 @@ export default {
   getTransactionHistory,
   getActivityLogs,
   removeFriend,
+  getAdminUsers,
+  getAdminTransactions,
+  getAdminGames,
+  updateGameConfig,
+  updateUserBalance,
+  updateUserRole,
+  updateUserStatus,
 };

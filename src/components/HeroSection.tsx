@@ -30,20 +30,21 @@ const HeroSection = () => {
       <div className="relative z-10 container mx-auto px-4 text-center">
         <div className="max-w-4xl mx-auto">
           {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-card border-primary/30 mb-8 animate-fade-in">
+          {/* <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-card border-primary/30 mb-8 animate-fade-in">
             <Sparkles className="w-4 h-4 text-primary" />
             <span className="text-sm font-medium text-primary">Nền tảng game #1 Việt Nam</span>
-          </div>
+          </div> */}
 
           {/* Title */}
           <h1 className="font-display text-5xl md:text-7xl lg:text-8xl font-black mb-6 animate-slide-up">
-            <span className="block text-foreground">CHƠI GAME</span>
-            <span className="block gradient-text">KHÔNG GIỚI HẠN</span>
+            <span className="block text-foreground">NƠI</span>
+            <span className="block gradient-text">CẢM XÚC</span>
+            <span className="block text-foreground">THĂNG HOA</span>
           </h1>
 
           {/* Subtitle */}
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 animate-slide-up" style={{ animationDelay: '0.1s' }}>
-            Khám phá hàng trăm tựa game hấp dẫn. Thi đấu, kết bạn và chinh phục bảng xếp hạng cùng hàng triệu game thủ.
+            Khám phá những tựa game hấp dẫn. Thi đấu, kết bạn và chinh phục bảng xếp hạng cùng cộng đồng game thủ.
           </p>
 
           {/* CTA Buttons */}

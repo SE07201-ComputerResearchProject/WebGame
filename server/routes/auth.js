@@ -36,7 +36,7 @@ router.get('/me', requireAuth, async (req, res) => {
         const result = await pool.request()
             .input('id', sql.Int, req.user.id)
             .query(`
-                SELECT id, username, email, balance, role, created_at 
+                SELECT id, username, email, balance, role, created_at, auth_type, status 
                 FROM dbo.users 
                 WHERE id = @id
             `);
@@ -95,8 +95,8 @@ router.post("/register", async (req, res) => {
         .input('email', sql.NVarChar(255), email)
         .input('password', sql.NVarChar(255), hash)
         .query(`
-        INSERT INTO dbo.users (username, email, password, role, created_at) 
-        VALUES (@username, @email, @password, 'user', GETUTCDATE()); 
+        INSERT INTO dbo.users (username, email, password, role, auth_type, created_at) 
+        VALUES (@username, @email, @password, 'user', 'local', GETUTCDATE()); 
         SELECT @@IDENTITY as id;
       `);
 
@@ -109,37 +109,6 @@ router.post("/register", async (req, res) => {
     res.json({ ok: true, user: userPayload, token });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
-// router.post("/register", async (req, res) => {
-//   try {
-//     const { username, email, password, captchaToken } = req.body;
-//     if (!username || !email || !password || !captchaToken) return res.status(400).json({ error: "Vui lòng điền đủ thông tin và xác nhận CAPTCHA" });
-
-//     const isHuman = await verifyCaptcha(captchaToken);
-//     if (!isHuman) return res.status(400).json({ error: "Xác thực người máy thất bại" });
-
-//     const pool = getPool();
-//     const checkResult = await pool.request().input('email', sql.NVarChar(255), email).input('username', sql.NVarChar(100), username).query(`SELECT id FROM dbo.users WHERE email = @email OR username = @username`);
-//     if (checkResult.recordset.length > 0) return res.status(409).json({ error: "Email hoặc Username đã tồn tại" });
-
-//     const hash = await bcrypt.hash(password, 10);
-//     const insertResult = await pool.request().input('username', sql.NVarChar(100), username).input('email', sql.NVarChar(255), email).input('password', sql.NVarChar(255), hash).query(`
-//         INSERT INTO dbo.users (username, email, password, role, created_at) VALUES (@username, @email, @password, 'user', GETUTCDATE()); SELECT @@IDENTITY as id;
-//       `);
-
-//     // Gán role mặc định là 'user' cho tài khoản mới
-//     const userPayload = { id: insertResult.recordset[0].id, username, email, role: 'user' };
-//     const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '7d' });
-    
-//     // Lấy IP của người dùng từ Request
-//     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-
-//     // Ghi log
-//     await logActivity(userPayload.id, 'LOGIN_SUCCESS', `Đăng ký và đăng nhập thành công vào hệ thống`, ip);
-
-//     // Đã sửa lỗi: Chỉ trả về res.json đúng 1 lần
-//     res.json({ ok: true, user: userPayload, token });
-//   } catch (err) { res.status(500).json({ error: err.message }); }
-// });
 
 router.post("/login", async (req, res) => {
   try {
@@ -150,10 +119,23 @@ router.post("/login", async (req, res) => {
     if (!isHuman) return res.status(400).json({ error: "Xác thực người máy thất bại" });
 
     const pool = getPool();
-    const result = await pool.request().input('email', sql.NVarChar(255), email).query(`SELECT id, username, password, mfa_enabled, mfa_type, phone, role FROM dbo.users WHERE email = @email`);
+    // 🔴 ĐÃ SỬA: Thêm status vào câu lệnh SELECT
+    const result = await pool.request()
+      .input('email', sql.NVarChar(255), email)
+      .query(`SELECT id, username, password, mfa_enabled, mfa_type, phone, role, status FROM dbo.users WHERE email = @email`);
+    
     if (result.recordset.length === 0) return res.status(401).json({ error: "Sai email hoặc mật khẩu" });
 
     const user = result.recordset[0];
+
+    // 🔴 ĐÃ SỬA: Chặn ngay nếu tài khoản bị khóa
+    if (user.status === 'banned') {
+      return res.status(403).json({ 
+        ok: false, 
+        message: 'Tài khoản của bạn đã bị khóa do vi phạm chính sách!' 
+      });
+    }
+
     const isValid = await bcrypt.compare(password, user.password);
     if (!isValid) return res.status(401).json({ error: "Sai email hoặc mật khẩu" });
 
@@ -161,7 +143,6 @@ router.post("/login", async (req, res) => {
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
     if (user.mfa_enabled) {
-      // Đã sửa lỗi: Nhét thêm user.role vào tempToken để không bị mất quyền Admin
       const mfaPayload = { id: user.id, email, username: user.username, role: user.role, mfaPending: true };
       
       if (user.mfa_type === 'sms') {
@@ -172,7 +153,7 @@ router.post("/login", async (req, res) => {
         return res.json({ ok: true, mfaRequired: true, mfaType: 'app', tempToken, message: "Vui lòng nhập mã Google Authenticator" });
       }
     }
-
+    
     await logActivity(user.id, 'LOGIN_SUCCESS', `Đăng nhập thành công vào hệ thống`, ip);
     const token = jwt.sign({ id: user.id, email, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ ok: true, user: { id: user.id, username: user.username, email, role: user.role }, token });
@@ -182,41 +163,46 @@ router.post("/login", async (req, res) => {
 router.post("/change-password", requireAuth, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: "Vui lòng nhập đầy đủ thông tin" });
-    }
-    if (newPassword.length < 6) {
+    
+    if (!newPassword || newPassword.length < 6) {
       return res.status(400).json({ error: "Mật khẩu mới phải có ít nhất 6 ký tự" });
     }
 
     const pool = getPool();
-    // 1. Lấy user hiện tại để kiểm tra pass cũ
+    // 🔴 ĐÃ SỬA: Lấy thêm auth_type để biết user đăng nhập bằng gì
     const userRes = await pool.request()
       .input('id', sql.Int, req.user.id)
-      .query(`SELECT password FROM dbo.users WHERE id = @id`);
+      .query(`SELECT password, auth_type FROM dbo.users WHERE id = @id`);
 
     if (userRes.recordset.length === 0) {
       return res.status(404).json({ error: "Người dùng không tồn tại" });
     }
 
-    // 2. So sánh pass cũ
-    const isValid = await bcrypt.compare(currentPassword, userRes.recordset[0].password);
-    if (!isValid) {
-      return res.status(400).json({ error: "Mật khẩu hiện tại không đúng!" });
+    const user = userRes.recordset[0];
+
+    // 🔴 ĐÃ SỬA: Chỉ yêu cầu và kiểm tra mật khẩu cũ nếu là tài khoản 'local'
+    if (user.auth_type !== 'google') {
+      if (!currentPassword) {
+        return res.status(400).json({ error: "Vui lòng nhập mật khẩu hiện tại" });
+      }
+      const isValid = await bcrypt.compare(currentPassword, user.password);
+      if (!isValid) {
+        return res.status(400).json({ error: "Mật khẩu hiện tại không đúng!" });
+      }
     }
 
-    // 3. Hash pass mới và cập nhật vào CSDL
+    // 3. Hash pass mới và cập nhật vào CSDL (Kèm theo việc reset auth_type về local)
     const newHash = await bcrypt.hash(newPassword, 10);
     await pool.request()
       .input('id', sql.Int, req.user.id)
       .input('newPassword', sql.NVarChar(255), newHash)
-      .query(`UPDATE dbo.users SET password = @newPassword WHERE id = @id`);
+      .query(`UPDATE dbo.users SET password = @newPassword, auth_type = 'local' WHERE id = @id`);
 
     // 4. Ghi log tự động
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     await logActivity(req.user.id, 'CHANGE_PASSWORD', `Người dùng đổi mật khẩu thành công`, ip);
 
-    res.json({ ok: true, message: "Đổi mật khẩu thành công!" });
+    res.json({ ok: true, message: "Cập nhật mật khẩu thành công!" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -232,9 +218,17 @@ router.post("/google", async (req, res) => {
     const { email, name } = payload;
     const pool = getPool();
 
-    let result = await pool.request().input('email', sql.NVarChar(255), email).query(`SELECT id, username, mfa_enabled, mfa_type, phone, role FROM dbo.users WHERE email = @email`);
+    // 🔴 ĐÃ SỬA: Thêm status vào câu lệnh SELECT
+    let result = await pool.request().input('email', sql.NVarChar(255), email)
+      .query(`SELECT id, username, mfa_enabled, mfa_type, phone, role, status FROM dbo.users WHERE email = @email`);
+    
     let user;
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+    // 🔴 ĐÃ SỬA: Kiểm tra nếu tài khoản Google bị Khóa
+    if (result.recordset.length > 0 && result.recordset[0].status === 'banned') {
+      return res.status(403).json({ ok: false, error: 'Tài khoản của bạn đã bị khóa do vi phạm chính sách!' });
+    }
 
     if (result.recordset.length === 0) {
       const randomPassword = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10);
@@ -245,7 +239,11 @@ router.post("/google", async (req, res) => {
         .input('username', sql.NVarChar(100), baseUsername)
         .input('email', sql.NVarChar(255), email)
         .input('password', sql.NVarChar(255), hash)
-        .query(`INSERT INTO dbo.users (username, email, password, role, created_at) VALUES (@username, @email, @password, 'user', GETUTCDATE()); SELECT @@IDENTITY as id;`);
+        .query(`
+          INSERT INTO dbo.users (username, email, password, role, auth_type, created_at) 
+          VALUES (@username, @email, @password, 'user', 'google', GETUTCDATE()); 
+          SELECT @@IDENTITY as id;
+        `);
       user = { id: insertResult.recordset[0].id, username: baseUsername, email, role: 'user', mfa_enabled: false };
     } else { 
       user = result.recordset[0]; 
@@ -291,7 +289,6 @@ router.post("/login/mfa", async (req, res) => {
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     await logActivity(decoded.id, 'LOGIN_SUCCESS', `Đăng nhập qua xác thực 2 lớp (MFA) thành công`, ip);
 
-    // Đã sửa lỗi: Gắn lại role cho Token thực tế
     const realToken = jwt.sign({ id: decoded.id, email: decoded.email, username: decoded.username, role: decoded.role }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ ok: true, user: { id: decoded.id, username: decoded.username, email: decoded.email, role: decoded.role }, token: realToken });
   } catch (err) { res.status(401).json({ error: "Phiên đăng nhập hết hạn" }); }
@@ -381,8 +378,6 @@ router.post("/mfa/disable", requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/me', requireAuth, (req, res) => res.json({ ok: true, user: req.user }));
-
 // Lấy lịch sử hoạt động của chính user đang đăng nhập
 router.get("/me/activity", requireAuth, async (req, res) => {
   try {
@@ -400,6 +395,7 @@ router.get("/me/activity", requireAuth, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 router.get("/all-users", requireAuth, async (req, res) => {
   try {
     const pool = getPool();
@@ -414,5 +410,430 @@ router.get("/all-users", requireAuth, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// Đã sửa lỗi: Di chuyển module.exports xuống vị trí dưới cùng của file!
+
 module.exports = router;
+
+// const { logActivity } = require('../utils/logger');
+// const express = require("express");
+// const router = express.Router();
+// const bcrypt = require('bcrypt');
+// const jwt = require('jsonwebtoken');
+// const speakeasy = require('speakeasy');
+// const qrcode = require('qrcode');
+// const { getPool, sql } = require('../db');
+// const { requireAuth } = require('../middleware/auth');
+// const { OAuth2Client } = require('google-auth-library');
+
+// const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+// const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
+// const RECAPTCHA_SECRET_KEY = process.env.RECAPTCHA_SECRET_KEY;
+
+// // Hàm kiểm tra Captcha Google
+// async function verifyCaptcha(token) {
+//   if (!token || !RECAPTCHA_SECRET_KEY) return false;
+//   try {
+//     const response = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+//       method: 'POST',
+//       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+//       body: `secret=${RECAPTCHA_SECRET_KEY}&response=${token}`
+//     });
+//     const data = await response.json();
+//     return data.success;
+//   } catch (error) {
+//     return false;
+//   }
+// }
+
+// router.get('/me', requireAuth, async (req, res) => {
+//     try {
+//         const pool = getPool();
+//         // Lấy thông tin user dựa vào ID đang đăng nhập (nhưng tuyệt đối không lấy password)
+//         const result = await pool.request()
+//             .input('id', sql.Int, req.user.id)
+//             .query(`
+//                 SELECT id, username, email, balance, role, created_at 
+//                 FROM dbo.users 
+//                 WHERE id = @id
+//             `);
+
+//         if (result.recordset.length === 0) {
+//             return res.status(404).json({ error: 'Không tìm thấy người dùng' });
+//         }
+
+//         // Trả về thông tin user mới nhất
+//         res.json({ ok: true, user: result.recordset[0] });
+//     } catch (error) {
+//         console.error('❌ Lỗi khi lấy thông tin user:', error.message);
+//         res.status(500).json({ error: 'Lỗi máy chủ' });
+//     }
+// });
+
+// // ==========================================
+// // CÁC API ĐĂNG KÝ / ĐĂNG NHẬP
+// // ==========================================
+
+// router.post("/register", async (req, res) => {
+//   try {
+//     const { username, email, password, captchaToken } = req.body;
+//     if (!username || !email || !password || !captchaToken) return res.status(400).json({ error: "Vui lòng điền đủ thông tin và xác nhận CAPTCHA" });
+
+//     // === BẮT ĐẦU BLOCK VALIDATION BACKEND ===
+//     const userRegex = /^[a-zA-Z0-9_]{3,20}$/;
+//     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+//     if (!userRegex.test(username)) {
+//       return res.status(400).json({ error: "Tên đăng nhập không hợp lệ (3-20 ký tự, không chứa ký tự đặc biệt)." });
+//     }
+//     if (!emailRegex.test(email)) {
+//       return res.status(400).json({ error: "Định dạng email không hợp lệ." });
+//     }
+//     if (password.length < 6) {
+//       return res.status(400).json({ error: "Mật khẩu phải có ít nhất 6 ký tự." });
+//     }
+//     // === KẾT THÚC BLOCK VALIDATION ===
+
+//     const isHuman = await verifyCaptcha(captchaToken);
+//     if (!isHuman) return res.status(400).json({ error: "Xác thực người máy thất bại" });
+
+//     const pool = getPool();
+//     // Cập nhật lại câu SQL để tìm chính xác hơn
+//     const checkResult = await pool.request()
+//         .input('email', sql.NVarChar(255), email)
+//         .input('username', sql.NVarChar(100), username)
+//         .query(`SELECT id FROM dbo.users WHERE email = @email OR username = @username`);
+        
+//     if (checkResult.recordset.length > 0) return res.status(409).json({ error: "Email hoặc Username đã tồn tại trong hệ thống." });
+
+//     const hash = await bcrypt.hash(password, 10);
+//     const insertResult = await pool.request()
+//         .input('username', sql.NVarChar(100), username)
+//         .input('email', sql.NVarChar(255), email)
+//         .input('password', sql.NVarChar(255), hash)
+//         .query(`
+//         INSERT INTO dbo.users (username, email, password, role, created_at) 
+//         VALUES (@username, @email, @password, 'user', GETUTCDATE()); 
+//         SELECT @@IDENTITY as id;
+//       `);
+
+//     const userPayload = { id: insertResult.recordset[0].id, username, email, role: 'user' };
+//     const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '7d' });
+    
+//     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+//     await logActivity(userPayload.id, 'REGISTER_SUCCESS', `Đăng ký và đăng nhập thành công vào hệ thống`, ip);
+
+//     res.json({ ok: true, user: userPayload, token });
+//   } catch (err) { res.status(500).json({ error: err.message }); }
+// });
+// // router.post("/register", async (req, res) => {
+// //   try {
+// //     const { username, email, password, captchaToken } = req.body;
+// //     if (!username || !email || !password || !captchaToken) return res.status(400).json({ error: "Vui lòng điền đủ thông tin và xác nhận CAPTCHA" });
+
+// //     const isHuman = await verifyCaptcha(captchaToken);
+// //     if (!isHuman) return res.status(400).json({ error: "Xác thực người máy thất bại" });
+
+// //     const pool = getPool();
+// //     const checkResult = await pool.request().input('email', sql.NVarChar(255), email).input('username', sql.NVarChar(100), username).query(`SELECT id FROM dbo.users WHERE email = @email OR username = @username`);
+// //     if (checkResult.recordset.length > 0) return res.status(409).json({ error: "Email hoặc Username đã tồn tại" });
+
+// //     const hash = await bcrypt.hash(password, 10);
+// //     const insertResult = await pool.request().input('username', sql.NVarChar(100), username).input('email', sql.NVarChar(255), email).input('password', sql.NVarChar(255), hash).query(`
+// //         INSERT INTO dbo.users (username, email, password, role, created_at) VALUES (@username, @email, @password, 'user', GETUTCDATE()); SELECT @@IDENTITY as id;
+// //       `);
+
+// //     // Gán role mặc định là 'user' cho tài khoản mới
+// //     const userPayload = { id: insertResult.recordset[0].id, username, email, role: 'user' };
+// //     const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '7d' });
+    
+// //     // Lấy IP của người dùng từ Request
+// //     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+// //     // Ghi log
+// //     await logActivity(userPayload.id, 'LOGIN_SUCCESS', `Đăng ký và đăng nhập thành công vào hệ thống`, ip);
+
+// //     // Đã sửa lỗi: Chỉ trả về res.json đúng 1 lần
+// //     res.json({ ok: true, user: userPayload, token });
+// //   } catch (err) { res.status(500).json({ error: err.message }); }
+// // });
+
+// router.post("/login", async (req, res) => {
+//   try {
+//     const { email, password, captchaToken } = req.body;
+//     if (!email || !password || !captchaToken) return res.status(400).json({ error: "Vui lòng điền đủ thông tin và CAPTCHA" });
+
+//     const isHuman = await verifyCaptcha(captchaToken);
+//     if (!isHuman) return res.status(400).json({ error: "Xác thực người máy thất bại" });
+
+//     const pool = getPool();
+//     const result = await pool.request().input('email', sql.NVarChar(255), email).query(`SELECT id, username, password, mfa_enabled, mfa_type, phone, role FROM dbo.users WHERE email = @email`);
+//     if (result.recordset.length === 0) return res.status(401).json({ error: "Sai email hoặc mật khẩu" });
+
+//     const user = result.recordset[0];
+//     const isValid = await bcrypt.compare(password, user.password);
+//     if (!isValid) return res.status(401).json({ error: "Sai email hoặc mật khẩu" });
+
+//     // Lấy IP để ghi log
+//     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+//     if (user.mfa_enabled) {
+//       // Đã sửa lỗi: Nhét thêm user.role vào tempToken để không bị mất quyền Admin
+//       const mfaPayload = { id: user.id, email, username: user.username, role: user.role, mfaPending: true };
+      
+//       if (user.mfa_type === 'sms') {
+//         const tempToken = jwt.sign({ ...mfaPayload, mfaType: 'sms', phone: user.phone }, JWT_SECRET, { expiresIn: '10m' });
+//         return res.json({ ok: true, mfaRequired: true, mfaType: 'sms', phoneMask: user.phone.slice(-4), phone: user.phone, tempToken, message: "Đang kết nối Firebase..." });
+//       } else {
+//         const tempToken = jwt.sign({ ...mfaPayload, mfaType: 'app' }, JWT_SECRET, { expiresIn: '5m' });
+//         return res.json({ ok: true, mfaRequired: true, mfaType: 'app', tempToken, message: "Vui lòng nhập mã Google Authenticator" });
+//       }
+//     }
+//      if (user.status === 'banned') {
+//       return res.status(403).json({ 
+//         ok: false, 
+//         message: 'Tài khoản của bạn đã bị khóa do vi phạm chính sách!' 
+//       });
+//     }
+//     await logActivity(user.id, 'LOGIN_SUCCESS', `Đăng nhập thành công vào hệ thống`, ip);
+//     const token = jwt.sign({ id: user.id, email, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+//     res.json({ ok: true, user: { id: user.id, username: user.username, email, role: user.role }, token });
+//   } catch (err) { res.status(500).json({ error: err.message }); }
+ 
+// });
+
+// router.post("/change-password", requireAuth, async (req, res) => {
+//   try {
+//     const { currentPassword, newPassword } = req.body;
+//     if (!currentPassword || !newPassword) {
+//       return res.status(400).json({ error: "Vui lòng nhập đầy đủ thông tin" });
+//     }
+//     if (newPassword.length < 6) {
+//       return res.status(400).json({ error: "Mật khẩu mới phải có ít nhất 6 ký tự" });
+//     }
+
+//     const pool = getPool();
+//     // 1. Lấy user hiện tại để kiểm tra pass cũ
+//     const userRes = await pool.request()
+//       .input('id', sql.Int, req.user.id)
+//       .query(`SELECT password FROM dbo.users WHERE id = @id`);
+
+//     if (userRes.recordset.length === 0) {
+//       return res.status(404).json({ error: "Người dùng không tồn tại" });
+//     }
+
+//     // 2. So sánh pass cũ
+//     const isValid = await bcrypt.compare(currentPassword, userRes.recordset[0].password);
+//     if (!isValid) {
+//       return res.status(400).json({ error: "Mật khẩu hiện tại không đúng!" });
+//     }
+
+//     // 3. Hash pass mới và cập nhật vào CSDL
+//     const newHash = await bcrypt.hash(newPassword, 10);
+//     await pool.request()
+//       .input('id', sql.Int, req.user.id)
+//       .input('newPassword', sql.NVarChar(255), newHash)
+//       .query(`UPDATE dbo.users SET password = @newPassword WHERE id = @id`);
+
+//     // 4. Ghi log tự động
+//     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+//     await logActivity(req.user.id, 'CHANGE_PASSWORD', `Người dùng đổi mật khẩu thành công`, ip);
+
+//     res.json({ ok: true, message: "Đổi mật khẩu thành công!" });
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
+// router.post("/google", async (req, res) => {
+//   try {
+//     const { credential } = req.body;
+//     if (!credential) return res.status(400).json({ error: "Thiếu thông tin Google" });
+
+//     const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: process.env.GOOGLE_CLIENT_ID });
+//     const payload = ticket.getPayload();
+//     const { email, name } = payload;
+//     const pool = getPool();
+
+//     let result = await pool.request().input('email', sql.NVarChar(255), email).query(`SELECT id, username, mfa_enabled, mfa_type, phone, role FROM dbo.users WHERE email = @email`);
+//     let user;
+//     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+//     if (result.recordset.length === 0) {
+//       const randomPassword = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10);
+//       const hash = await bcrypt.hash(randomPassword, 10);
+//       const baseUsername = name.replace(/\s+/g, '').toLowerCase();
+      
+//       const insertResult = await pool.request()
+//         .input('username', sql.NVarChar(100), baseUsername)
+//         .input('email', sql.NVarChar(255), email)
+//         .input('password', sql.NVarChar(255), hash)
+//         .query(`INSERT INTO dbo.users (username, email, password, role, created_at) VALUES (@username, @email, @password, 'user', GETUTCDATE()); SELECT @@IDENTITY as id;`);
+//       user = { id: insertResult.recordset[0].id, username: baseUsername, email, role: 'user', mfa_enabled: false };
+//     } else { 
+//       user = result.recordset[0]; 
+//     }
+
+//     if (user.mfa_enabled) {
+//       const mfaPayload = { id: user.id, email, username: user.username, role: user.role, mfaPending: true };
+//       if (user.mfa_type === 'sms') {
+//         const tempToken = jwt.sign({ ...mfaPayload, mfaType: 'sms', phone: user.phone }, JWT_SECRET, { expiresIn: '10m' });
+//         return res.json({ ok: true, mfaRequired: true, mfaType: 'sms', phoneMask: user.phone.slice(-4), phone: user.phone, tempToken, message: "Đang kết nối Firebase..." });
+//       } else {
+//         const tempToken = jwt.sign({ ...mfaPayload, mfaType: 'app' }, JWT_SECRET, { expiresIn: '5m' });
+//         return res.json({ ok: true, mfaRequired: true, mfaType: 'app', tempToken, message: "Vui lòng nhập mã Google Authenticator" });
+//       }
+//     }
+
+//     await logActivity(user.id, 'LOGIN_SUCCESS', `Đăng nhập Google thành công`, ip);
+//     const token = jwt.sign({ id: user.id, email: user.email, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+//     res.json({ ok: true, user: { id: user.id, username: user.username, email: user.email, role: user.role }, token });
+//   } catch (err) { res.status(500).json({ error: "Lỗi xác thực với Google" }); }
+// });
+
+// // ==========================================
+// // XÁC THỰC MFA ĐĂNG NHẬP (CHUNG CHO SMS & APP)
+// // ==========================================
+// router.post("/login/mfa", async (req, res) => {
+//   try {
+//     const { tempToken, code } = req.body; 
+//     if (!tempToken) return res.status(400).json({ error: "Thiếu thông tin xác thực" });
+//     const decoded = jwt.verify(tempToken, JWT_SECRET);
+//     if (!decoded.mfaPending) return res.status(400).json({ error: "Token không hợp lệ" });
+
+//     const pool = getPool();
+    
+//     if (decoded.mfaType === 'sms') {
+//       if (code !== "firebase_ok") return res.status(401).json({ error: "Lỗi xác thực Firebase!" });
+//     } else {
+//       const result = await pool.request().input('id', sql.Int, decoded.id).query(`SELECT mfa_secret FROM dbo.users WHERE id = @id`);
+//       const verified = speakeasy.totp.verify({ secret: result.recordset[0].mfa_secret, encoding: 'base32', token: code, window: 1 });
+//       if (!verified) return res.status(401).json({ error: "Mã xác thực không chính xác" });
+//     }
+
+//     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+//     await logActivity(decoded.id, 'LOGIN_SUCCESS', `Đăng nhập qua xác thực 2 lớp (MFA) thành công`, ip);
+
+//     // Đã sửa lỗi: Gắn lại role cho Token thực tế
+//     const realToken = jwt.sign({ id: decoded.id, email: decoded.email, username: decoded.username, role: decoded.role }, JWT_SECRET, { expiresIn: '7d' });
+//     res.json({ ok: true, user: { id: decoded.id, username: decoded.username, email: decoded.email, role: decoded.role }, token: realToken });
+//   } catch (err) { res.status(401).json({ error: "Phiên đăng nhập hết hạn" }); }
+// });
+
+// // ==========================================
+// // CÁC HÀM CÀI ĐẶT MFA
+// // ==========================================
+
+// router.post("/mfa/setup-sms", requireAuth, async (req, res) => {
+//   res.json({ ok: true, message: "Firebase is handling SMS" });
+// });
+
+// router.post("/mfa/enable-sms", requireAuth, async (req, res) => {
+//   try {
+//     const { phone, code } = req.body;
+//     if (code !== "firebase_ok") return res.status(400).json({ error: "Xác thực Firebase thất bại" });
+    
+//     const pool = getPool();
+//     await pool.request().input('id', sql.Int, req.user.id).input('phone', sql.NVarChar(20), phone).query(`UPDATE dbo.users SET mfa_enabled = 1, mfa_type = 'sms', phone = @phone, mfa_secret = NULL WHERE id = @id`);
+    
+//     await logActivity(req.user.id, 'MFA_ENABLED', `Bật xác thực bảo mật qua tin nhắn SMS thành công`);
+//     res.json({ ok: true, message: "Đã bật bảo mật SMS thành công!" });
+//   } catch (err) { res.status(500).json({ error: err.message }); }
+// });
+
+// router.post("/mfa/request-disable", requireAuth, async (req, res) => {
+//   try {
+//     const pool = getPool();
+//     const result = await pool.request().input('id', sql.Int, req.user.id).query(`SELECT phone FROM dbo.users WHERE id = @id`);
+//     res.json({ ok: true, phone: result.recordset[0].phone });
+//   } catch (err) { res.status(500).json({ error: err.message }); }
+// });
+
+// router.post("/mfa/setup", requireAuth, async (req, res) => {
+//   try {
+//     const secret = speakeasy.generateSecret({ name: `NexusGames (${req.user.email})` });
+//     const pool = getPool();
+//     await pool.request().input('id', sql.Int, req.user.id).input('secret', sql.NVarChar(100), secret.base32).query(`UPDATE dbo.users SET mfa_secret = @secret WHERE id = @id`);
+//     const qrCodeUrl = await qrcode.toDataURL(secret.otpauth_url);
+//     res.json({ ok: true, qrCodeUrl, secret: secret.base32 });
+//   } catch (err) { res.status(500).json({ error: err.message }); }
+// });
+
+// router.post("/mfa/enable", requireAuth, async (req, res) => {
+//   try {
+//     const { code } = req.body;
+//     const pool = getPool();
+//     const result = await pool.request().input('id', sql.Int, req.user.id).query(`SELECT mfa_secret FROM dbo.users WHERE id = @id`);
+//     const verified = speakeasy.totp.verify({ secret: result.recordset[0].mfa_secret, encoding: 'base32', token: code, window: 1 });
+//     if (!verified) return res.status(400).json({ error: "Mã xác nhận không đúng" });
+    
+//     await pool.request().input('id', sql.Int, req.user.id).query(`UPDATE dbo.users SET mfa_enabled = 1, mfa_type = 'app' WHERE id = @id`);
+//     await logActivity(req.user.id, 'MFA_ENABLED', `Bật xác thực bảo mật qua Google Authenticator thành công`);
+    
+//     res.json({ ok: true, message: "Đã bật bảo mật 2 lớp thành công!" });
+//   } catch (err) { res.status(500).json({ error: err.message }); }
+// });
+
+// router.get("/mfa/status", requireAuth, async (req, res) => {
+//   try {
+//     const pool = getPool();
+//     const result = await pool.request().input('id', sql.Int, req.user.id).query(`SELECT mfa_enabled, mfa_type, phone FROM dbo.users WHERE id = @id`);
+//     res.json({ ok: true, enabled: result.recordset[0].mfa_enabled, type: result.recordset[0].mfa_type, phone: result.recordset[0].phone });
+//   } catch (err) { res.status(500).json({ error: err.message }); }
+// });
+
+// router.post("/mfa/disable", requireAuth, async (req, res) => {
+//   try {
+//     const { code } = req.body; 
+//     if (!code) return res.status(400).json({ error: "Vui lòng nhập mã xác nhận" });
+//     const pool = getPool();
+//     const result = await pool.request().input('id', sql.Int, req.user.id).query(`SELECT mfa_secret, mfa_type FROM dbo.users WHERE id = @id`);
+//     const user = result.recordset[0];
+
+//     if (user.mfa_type === 'app') {
+//       const verified = speakeasy.totp.verify({ secret: user.mfa_secret, encoding: 'base32', token: code, window: 1 });
+//       if (!verified) return res.status(400).json({ error: "Mã xác nhận không đúng" });
+//     } else if (user.mfa_type === 'sms') {
+//       if (code !== "firebase_ok") return res.status(400).json({ error: "Mã xác thực Firebase thất bại" });
+//     }
+
+//     await pool.request().input('id', sql.Int, req.user.id).query(`UPDATE dbo.users SET mfa_enabled = 0, mfa_type = NULL, mfa_secret = NULL, phone = NULL WHERE id = @id`);
+//     await logActivity(req.user.id, 'MFA_DISABLED', `Đã tắt tính năng bảo mật 2 lớp (MFA)`);
+    
+//     res.json({ ok: true, message: "Đã tắt và xóa MFA thành công" });
+//   } catch (err) { res.status(500).json({ error: err.message }); }
+// });
+
+// router.get('/me', requireAuth, (req, res) => res.json({ ok: true, user: req.user }));
+
+// // Lấy lịch sử hoạt động của chính user đang đăng nhập
+// router.get("/me/activity", requireAuth, async (req, res) => {
+//   try {
+//     const pool = getPool();
+//     const result = await pool.request()
+//       .input('userId', sql.Int, req.user.id)
+//       .query(`
+//         SELECT top 50 id, action, description, created_at 
+//         FROM dbo.activity_logs 
+//         WHERE user_id = @userId 
+//         ORDER BY created_at DESC
+//       `);
+//     res.json({ ok: true, logs: result.recordset });
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+// router.get("/all-users", requireAuth, async (req, res) => {
+//   try {
+//     const pool = getPool();
+//     // Lấy ID và Username của tất cả người dùng trong hệ thống
+//     const result = await pool.request().query(`
+//       SELECT id, username 
+//       FROM dbo.users
+//     `);
+    
+//     res.json({ ok: true, users: result.recordset });
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+// // Đã sửa lỗi: Di chuyển module.exports xuống vị trí dưới cùng của file!
+// module.exports = router;

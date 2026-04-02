@@ -15,9 +15,11 @@ interface ChatMessage {
   created_at: string;
 }
 
+// 1. CẬP NHẬT INTERFACE: Cho phép nhận cả name và username
 interface ChatUser {
   id: number;
-  username: string;
+  username?: string;
+  name?: string;
 }
 
 const FloatingChatWidget = () => {
@@ -34,29 +36,23 @@ const FloatingChatWidget = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const currentUser = auth.getUser();
 
-  const [unreadGlobal, setUnreadGlobal] = useState(0); // Đếm tin Kênh Thế Giới
-  const [unreadPrivate, setUnreadPrivate] = useState<Record<number, number>>({}); // Đếm tin 1-1 theo ID người gửi
+  const [unreadGlobal, setUnreadGlobal] = useState(0); 
+  const [unreadPrivate, setUnreadPrivate] = useState<Record<number, number>>({}); 
 
-  // Tính tổng số tin nhắn chưa đọc để hiển thị ở cục tròn to ngoài cùng
   const totalUnread = unreadGlobal + Object.values(unreadPrivate).reduce((a, b) => a + b, 0);
 
-
-
-  // THÊM ĐOẠN NÀY VÀO: Bắn tín hiệu lên Navbar mỗi khi có tin nhắn mới
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('update-unread-messages', { detail: totalUnread }));
   }, [totalUnread]);
 
-  // 1. Kết nối Socket & Tải danh bạ
   useEffect(() => {
     if (!currentUser) return;
 
-    // Tải danh sách người dùng
+    // 2. ĐỔI API THÀNH getFriends ĐỂ CHỈ HIỂN THỊ BẠN BÈ
     const fetchUsers = async () => {
-      const res = await api.getUsers();
+      const res = await api.getFriends();
       if (res?.ok) {
-        // Lọc bỏ chính mình ra khỏi danh bạ
-        setUsersList(res.users.filter((u: ChatUser) => u.id !== currentUser.id));
+        setUsersList(res.friends.filter((u: ChatUser) => u.id !== currentUser.id));
       }
     };
     fetchUsers();
@@ -64,14 +60,11 @@ const FloatingChatWidget = () => {
     const newSocket = io(import.meta.env.VITE_API_BASE || "http://localhost:4000", { transports: ["websocket"] });
     setSocket(newSocket);
 
-    // BÁO DANH: Đăng ký phòng riêng cho user này
     newSocket.emit("register_user", { id: currentUser.id, username: currentUser.username });
 
-    // Nghe tin nhắn Thế Giới
     newSocket.on("receive_global_message", (newMessage: ChatMessage) => {
       setGlobalMessages((prev) => [...prev, newMessage]);
       
-      // Nếu không mở khung chat, hoặc đang mở nhưng KHÔNG ở Kênh Thế Giới -> Tăng số đếm
       setIsOpen((currentIsOpen) => {
         setView((currentView) => {
           if (!currentIsOpen || currentView !== "global") {
@@ -83,30 +76,23 @@ const FloatingChatWidget = () => {
       });
     });
 
-   // Nghe tin nhắn Cá Nhân (1-1)
     newSocket.on("receive_private_message", (newMessage: ChatMessage) => {
       setPrivateMessages((prev) => [...prev, newMessage]);
       
       const isMe = newMessage.sender_id === currentUser.id;
-      
-      // Nếu mình là người gửi, hệ thống trả về để cập nhật UI -> KHÔNG làm gì thêm
       if (isMe) return;
 
-      // Nếu là tin nhắn người khác gửi đến
       setIsOpen((currentIsOpen) => {
         setView((currentView) => {
           setTargetUser((currentTargetUser) => {
             const isChattingWithThem = currentIsOpen && currentView === "private" && currentTargetUser?.id === newMessage.sender_id;
             
-            // Nếu không đang chat trực tiếp với họ -> Báo Popup và Tăng số đếm
             if (!isChattingWithThem) {
-              // Hiện popup (Fix lỗi text dài bằng line-clamp-2)
               toast({ 
                 title: `Tin nhắn từ ${newMessage.username}`, 
                 description: <div className="line-clamp-2 break-words text-sm opacity-90">{newMessage.content}</div> 
               });
 
-              // Tăng số đếm cho riêng ID của người gửi này
               setUnreadPrivate((prev) => ({
                 ...prev,
                 [newMessage.sender_id]: (prev[newMessage.sender_id] || 0) + 1
@@ -120,32 +106,29 @@ const FloatingChatWidget = () => {
       });
     });
     return () => { newSocket.disconnect(); };
-  }, [currentUser?.id]); // Khởi động lại nếu User đăng nhập/đăng xuất
+  }, [currentUser?.id]);
 
-  // 2. Chuyển phòng & Tải lịch sử chat
   const openChat = async (type: "global" | "private", user: ChatUser | null = null) => {
     setView(type);
     setTargetUser(user);
     
     if (type === "global") {
-      setUnreadGlobal(0); // Reset số đếm Thế Giới
+      setUnreadGlobal(0); 
       const res = await api.getGlobalMessages();
       if (res?.ok) setGlobalMessages(res.messages);
     } else if (type === "private" && user && currentUser) {
-      setUnreadPrivate((prev) => ({ ...prev, [user.id]: 0 })); // Reset số đếm của người này
+      setUnreadPrivate((prev) => ({ ...prev, [user.id]: 0 })); 
       const res = await api.getPrivateMessages(user.id, currentUser.id);
       if (res?.ok) setPrivateMessages(res.messages);
     }
   };
 
-  // 3. Tự động cuộn
   useEffect(() => {
     if (isOpen && messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [globalMessages, privateMessages, isOpen, view]);
 
-  // 4. Xử lý Gửi tin nhắn
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || !currentUser || !socket) return;
@@ -162,17 +145,13 @@ const FloatingChatWidget = () => {
     setInput("");
   };
 
-  // Biến lấy danh sách tin nhắn hiện tại theo view
   const currentMessages = view === "global" ? globalMessages : privateMessages;
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
-      
-      {/* KHUNG CHAT ĐƯỢC MỞ */}
       {isOpen && (
         <div className="mb-4 w-[350px] sm:w-[400px] h-[500px] glass-card rounded-2xl border border-primary/30 shadow-[0_0_30px_hsl(var(--primary)/0.15)] flex flex-col overflow-hidden animate-slide-up origin-bottom-right">
           
-          {/* HEADER CHUNG */}
           <div className="h-14 bg-background/80 border-b border-border/50 flex items-center justify-between px-4">
             <div className="flex items-center gap-3">
               {view !== "list" && (
@@ -183,17 +162,16 @@ const FloatingChatWidget = () => {
               <h3 className="font-bold text-foreground flex items-center gap-2">
                 {view === "list" && "Danh Bạ Trực Tuyến"}
                 {view === "global" && <><Globe className="w-4 h-4 text-primary" /> Kênh Thế Giới</>}
-                {view === "private" && <><User className="w-4 h-4 text-neon-green" /> {targetUser?.username}</>}
+                {/* 3. HIỂN THỊ TÊN ƯU TIÊN NAME */}
+                {view === "private" && <><User className="w-4 h-4 text-neon-green" /> {targetUser?.name || targetUser?.username}</>}
               </h3>
             </div>
             
-            {/* NÚT ĐÓNG KHUNG CHAT (MŨI TÊN XUỐNG) */}
             <button onClick={() => setIsOpen(false)} className="p-2 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground">
               <ChevronDown className="w-5 h-5" />
             </button>
           </div>
 
-          {/* MÀN HÌNH 1: DANH BẠ */}
           {view === "list" && (
             <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-background/30 backdrop-blur-sm">
               <button 
@@ -207,7 +185,6 @@ const FloatingChatWidget = () => {
                   <p className="font-bold">Kênh Thế Giới</p>
                   <p className="text-xs text-muted-foreground">Chat chung với toàn server</p>
                 </div>
-                {/* 🔴 CHẤM ĐỎ: KÊNH THẾ GIỚI */}
                 {unreadGlobal > 0 && (
                   <span className="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-sm">
                     {unreadGlobal}
@@ -217,12 +194,13 @@ const FloatingChatWidget = () => {
 
               <div className="flex items-center gap-2 mb-3 px-1">
                 <Users className="w-4 h-4 text-muted-foreground" />
-                <span className="text-xs font-bold text-muted-foreground uppercase">Người chơi khác</span>
+                {/* 4. ĐỔI TIÊU ĐỀ THÀNH BẠN BÈ CHO ĐỒNG BỘ */}
+                <span className="text-xs font-bold text-muted-foreground uppercase">Bạn bè</span>
               </div>
 
               <div className="space-y-2">
                 {usersList.length === 0 ? (
-                  <p className="text-sm text-center text-muted-foreground py-4">Chưa có người chơi nào.</p>
+                  <p className="text-sm text-center text-muted-foreground py-4">Chưa có người bạn nào.</p>
                 ) : (
                   usersList.map((user) => (
                     <button 
@@ -233,9 +211,9 @@ const FloatingChatWidget = () => {
                         <User className="w-5 h-5" />
                       </div>
                       <div className="text-left flex-1">
-                        <p className="font-medium">{user.username}</p>
+                        {/* 5. HIỂN THỊ TÊN BẠN BÈ */}
+                        <p className="font-medium">{user.name || user.username}</p>
                       </div>
-                      {/* 🔴 CHẤM ĐỎ: BẠN BÈ GỬI */}
                       {unreadPrivate[user.id] > 0 && (
                         <span className="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-sm">
                           {unreadPrivate[user.id]}
@@ -248,10 +226,8 @@ const FloatingChatWidget = () => {
             </div>
           )}
 
-          {/* MÀN HÌNH 2: KHUNG CHAT (Chung cho Global và Private) */}
           {view !== "list" && (
             <>
-              {/* Lớp min-h-0 chống tràn khung */}
               <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-background/30 backdrop-blur-sm">
                 {currentMessages.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-50">
@@ -268,7 +244,6 @@ const FloatingChatWidget = () => {
                             {msg.username}
                           </span>
                         )}
-                        {/* Lớp break-words whitespace-pre-wrap chống đâm thủng chiều ngang */}
                         <div className={`max-w-[80%] px-4 py-2 rounded-2xl text-sm break-words whitespace-pre-wrap ${isMe ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-muted/80 text-foreground border border-border/50 rounded-tl-sm"}`}>
                           {msg.content}
                         </div>  
@@ -279,7 +254,6 @@ const FloatingChatWidget = () => {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Ô NHẬP TIN NHẮN */}
               <div className="p-3 bg-background/80 border-t border-border/50">
                 <form onSubmit={handleSendMessage} className="relative flex items-center gap-2">
                   <input
@@ -297,14 +271,12 @@ const FloatingChatWidget = () => {
         </div>
       )}
 
-      {/* NÚT BONG BÓNG MỞ CHAT NGOÀI CÙNG (Cố định ở góc dưới bên phải) */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`relative flex items-center justify-center w-14 h-14 rounded-full shadow-2xl transition-all duration-300 hover:scale-110 active:scale-95 ${isOpen ? "bg-muted text-foreground" : "bg-primary text-primary-foreground shadow-[0_0_20px_hsl(var(--primary)/0.5)]"}`}
       >
         {isOpen ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
         
-        {/* 🔴 CHẤM ĐỎ TỔNG: HIỂN THỊ TRÊN ICON NGOÀI CÙNG KHI ĐÓNG CHAT */}
         {totalUnread > 0 && !isOpen && (
           <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-md animate-bounce">
             {totalUnread > 99 ? '99+' : totalUnread}
